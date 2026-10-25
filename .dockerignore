@@ -12,3 +12,7 @@ tsb-migrate
 *.test
 coverage.out
 docs
+.worktrees
+.idea
+.vscode
+**/.DS_Store
