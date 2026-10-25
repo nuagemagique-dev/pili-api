@@ -639,32 +639,6 @@ func renderReadyTimeUpdatedEmailText(path string, u userDomain.User, o orderDoma
 }
 
 // --------------------------------------------------------------------------------
-// Re-engagement
-// --------------------------------------------------------------------------------
-
-func prepareReengagementData(u userDomain.User) any {
-	return struct {
-		UserName string
-		MenuLink string
-		LogoURL  string
-	}{
-		UserName: formatUserName(u),
-		MenuLink: os.Getenv("APP_BASE_URL"),
-		LogoURL:  logoURL(),
-	}
-}
-
-func renderReengagementEmailHTML(path string, u userDomain.User) (string, error) {
-	data := prepareReengagementData(u)
-	return renderEmail(path, data, loadHTMLTemplate)
-}
-
-func renderReengagementEmailText(path string, u userDomain.User) (string, error) {
-	data := prepareReengagementData(u)
-	return renderEmail(path, data, loadTextTemplate)
-}
-
-// --------------------------------------------------------------------------------
 // Feedback (admin-facing)
 // --------------------------------------------------------------------------------
 

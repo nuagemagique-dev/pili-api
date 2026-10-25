@@ -7,8 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/graph-gophers/dataloader"
-	"github.com/stretchr/testify/assert"
+		"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"tsb-service/internal/api/graphql/testhelpers"
@@ -226,13 +225,22 @@ func TestTypedLoader(t *testing.T) {
 		assert.ErrorContains(t, err, "failed to fetch numbers")
 	})
 
-	t.Run("a result of an unexpected type is reported, not panicked on", func(t *testing.T) {
-		// Feed the underlying loader a value that is not a []int.
-		wrong := &db.TypedLoader[int]{Loader: dataloader.NewBatchedLoader(func(context.Context, dataloader.Keys) []*dataloader.Result {
-			return []*dataloader.Result{{Data: "not a slice"}}
-		})}
-		_, err := wrong.Load(ctx, "k")
-		require.ErrorContains(t, err, "unexpected type from typed loader")
+	t.Run("results follow key order even when the fetch map is unordered", func(t *testing.T) {
+		loader := db.NewTypedLoader(func(_ context.Context, keys []string) (map[string][]string, error) {
+			out := map[string][]string{}
+			for _, k := range keys {
+				if k != "gap" {
+					out[k] = []string{"v-" + k}
+				}
+			}
+			return out, nil
+		}, "x")
+
+		keys := []string{"k3", "gap", "k1", "k2"}
+		thunks := loader.Loader.LoadMany(ctx, keys)
+		vals, errs := thunks()
+		require.Empty(t, errs)
+		assert.Equal(t, [][]string{{"v-k3"}, {}, {"v-k1"}, {"v-k2"}}, vals)
 	})
 
 	t.Run("the loader caches within its lifetime", func(t *testing.T) {

@@ -15,7 +15,7 @@ import (
 // (feedback is staff-facing English and assistant-bot-problem staff-facing Chinese: not listed.)
 var customerTemplates = []string{
 	"account-linked", "login-otp", "order-canceled", "order-completed", "order-confirmed", "order-pending",
-	"order-ready", "ready-time-updated", "reengagement", "refund-issued", "verify", "welcome",
+	"order-ready", "ready-time-updated", "refund-issued", "verify", "welcome",
 }
 
 var templateLanguages = []string{"fr", "nl", "en", "zh"}
