@@ -5,9 +5,10 @@ import (
 	"errors"
 	"net"
 	"strings"
+	"sync"
 	"testing"
 
-		"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"tsb-service/internal/api/graphql/testhelpers"
@@ -210,11 +211,12 @@ func TestTypedLoader(t *testing.T) {
 			assert.Equal(t, []string{strings.ToUpper(r.key)}, r.vals)
 		}
 		close(calls)
-		total := 0
+		var batches [][]string
 		for batch := range calls {
-			total += len(batch)
+			batches = append(batches, batch)
 		}
-		assert.Equal(t, 3, total, "every key was fetched exactly once")
+		require.Len(t, batches, 1, "all loads inside one window share one fetch")
+		assert.ElementsMatch(t, []string{"a", "b", "c"}, batches[0], "every key was fetched exactly once")
 	})
 
 	t.Run("a fetch failure fails every key with the configured message and the cause", func(t *testing.T) {
@@ -241,6 +243,38 @@ func TestTypedLoader(t *testing.T) {
 		vals, errs := thunks()
 		require.Empty(t, errs)
 		assert.Equal(t, [][]string{{"v-k3"}, {}, {"v-k1"}, {"v-k2"}}, vals)
+	})
+
+	t.Run("a duplicate key in one window is fetched once and each caller gets its own key's value", func(t *testing.T) {
+		var batches [][]string
+		var mu sync.Mutex
+		loader := db.NewTypedLoader(func(_ context.Context, keys []string) (map[string][]string, error) {
+			mu.Lock()
+			batches = append(batches, append([]string(nil), keys...))
+			mu.Unlock()
+			out := map[string][]string{}
+			for _, k := range keys {
+				out[k] = []string{"v-" + k}
+			}
+			return out, nil
+		}, "x")
+
+		var wg sync.WaitGroup
+		got := make([][]string, 4)
+		for i, k := range []string{"b", "a", "b", "c"} {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				v, err := loader.Load(ctx, k)
+				assert.NoError(t, err)
+				got[i] = v
+			}()
+		}
+		wg.Wait()
+
+		assert.Equal(t, [][]string{{"v-b"}, {"v-a"}, {"v-b"}, {"v-c"}}, got)
+		require.Len(t, batches, 1)
+		assert.ElementsMatch(t, []string{"a", "b", "c"}, batches[0])
 	})
 
 	t.Run("the loader caches within its lifetime", func(t *testing.T) {
