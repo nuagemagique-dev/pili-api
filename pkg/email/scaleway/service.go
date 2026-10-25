@@ -834,55 +834,6 @@ func SendReadyTimeUpdatedEmail(user userDomain.User, lang string, order orderDom
 	return nil
 }
 
-func SendReengagementEmail(user userDomain.User, lang string) error {
-	lang = locale.Normalize(lang)
-
-	newReq, err := copyBaseReq()
-	if err != nil {
-		return err
-	}
-
-	userFullName := fmt.Sprintf("%s %s", user.FirstName, user.LastName)
-	to := temv1alpha1.CreateEmailRequestAddress{
-		Email: user.Email,
-		Name:  &userFullName,
-	}
-	newReq.To = append(newReq.To, &to)
-
-	path := fmt.Sprintf("templates/%s/reengagement", lang)
-
-	htmlContent, err := renderReengagementEmailHTML(path, user)
-	if err != nil {
-		return fmt.Errorf("failed to render email template: %w", err)
-	}
-
-	plainTextContent, err := renderReengagementEmailText(path, user)
-	if err != nil {
-		return fmt.Errorf("failed to render email template: %w", err)
-	}
-
-	subjects := map[string]string{
-		"en": "We miss you at " + brandCfg().Name + "!",
-		"fr": "Vous nous manquez chez " + brandCfg().Name + " !",
-		"zh": brandCfg().Name + " 想念您！",
-		"nl": "We missen u, tot snel bij " + brandCfg().Name + "!",
-	}
-
-	subject := subjects[lang]
-
-	newReq.Subject = subject
-	newReq.HTML = htmlContent
-	newReq.Text = plainTextContent
-
-	err = dispatch(&newReq)
-	if err != nil {
-		return fmt.Errorf("failed to send email: %w", err)
-	}
-
-	logger.Debugf("Email sent to %s with subject: %s", user.Email, subject)
-	return nil
-}
-
 func SendFeedbackEmail(name, email, serviceType, feedbackType, message, lang string) error {
 	newReq, err := copyBaseReq()
 	if err != nil {
