@@ -227,6 +227,24 @@ func TestTypedLoader(t *testing.T) {
 		assert.ErrorContains(t, err, "failed to fetch numbers")
 	})
 
+	t.Run("results follow key order even when the fetch map is unordered", func(t *testing.T) {
+		loader := db.NewTypedLoader(func(_ context.Context, keys []string) (map[string][]string, error) {
+			out := map[string][]string{}
+			for _, k := range keys {
+				if k != "gap" {
+					out[k] = []string{"v-" + k}
+				}
+			}
+			return out, nil
+		}, "x")
+
+		keys := []string{"k3", "gap", "k1", "k2"}
+		thunks := loader.Loader.LoadMany(ctx, keys)
+		vals, errs := thunks()
+		require.Empty(t, errs)
+		assert.Equal(t, [][]string{{"v-k3"}, {}, {"v-k1"}, {"v-k2"}}, vals)
+	})
+
 	t.Run("a duplicate key in one window is fetched once and each caller gets its own key's value", func(t *testing.T) {
 		var batches [][]string
 		var mu sync.Mutex

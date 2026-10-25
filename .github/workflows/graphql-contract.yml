@@ -161,8 +161,25 @@ jobs:
           fi
           tools="$RUNNER_TEMP/gql-tools"
           mkdir -p "$tools"
-          gql=$(node -p "require('./package-lock.json').packages['node_modules/graphql'].version")
-          ts=$(node -p "require('./package-lock.json').packages['node_modules/typescript'].version")
+          # The client's own graphql and typescript versions, from its lockfile: the root importer of
+          # pnpm-lock.yaml (pnpm) or package-lock.json (npm).
+          lockver() {
+            node -e '
+              const fs = require("fs")
+              const name = process.argv[1]
+              if (fs.existsSync("pnpm-lock.yaml")) {
+                const lock = fs.readFileSync("pnpm-lock.yaml", "utf8")
+                const re = new RegExp(`\\n      ${name}:\\n        specifier: [^\\n]+\\n        version: ([^\\n(]+)`)
+                const m = lock.match(re)
+                if (!m) throw new Error(`${name} is not in the root importer of pnpm-lock.yaml`)
+                console.log(m[1].trim())
+              } else {
+                console.log(require(`${process.cwd()}/package-lock.json`).packages[`node_modules/${name}`].version)
+              }
+            ' "$1"
+          }
+          gql=$(lockver graphql)
+          ts=$(lockver typescript)
           npm install --prefix "$tools" --no-audit --no-fund --ignore-scripts "graphql@$gql" "typescript@$ts"
           cp scripts/check-graphql-operations.mjs "$tools/"
           read -ra roots <<< "$ROOTS"

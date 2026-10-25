@@ -17,12 +17,14 @@ type TypedLoader[T any] struct {
 type BatchFetchFuncTyped[T any] func(ctx context.Context, keys []string) (map[string][]T, error)
 
 // NewTypedLoader creates a new TypedLoader using the provided batch fetch function.
+// The batch results are returned in key order; a key absent from the fetched map yields an
+// empty slice and a fetch failure fails every key of the batch.
 func NewTypedLoader[T any](batchFetchFunc BatchFetchFuncTyped[T], errorMessage string) *TypedLoader[T] {
-	batchFn := func(ctx context.Context, ids []string) []*dataloader.Result[[]T] {
-		dataMap, err := batchFetchFunc(ctx, ids)
-		results := make([]*dataloader.Result[[]T], len(ids))
+	batchFn := func(ctx context.Context, keys []string) []*dataloader.Result[[]T] {
+		dataMap, err := batchFetchFunc(ctx, keys)
+		results := make([]*dataloader.Result[[]T], len(keys))
 		if err != nil {
-			for i := range ids {
+			for i := range keys {
 				results[i] = &dataloader.Result[[]T]{
 					Error: fmt.Errorf("%s: %w", errorMessage, err),
 				}
@@ -30,8 +32,8 @@ func NewTypedLoader[T any](batchFetchFunc BatchFetchFuncTyped[T], errorMessage s
 			return results
 		}
 
-		for i, id := range ids {
-			if data, ok := dataMap[id]; ok {
+		for i, key := range keys {
+			if data, ok := dataMap[key]; ok {
 				results[i] = &dataloader.Result[[]T]{Data: data}
 			} else {
 				results[i] = &dataloader.Result[[]T]{Data: []T{}}
@@ -41,7 +43,7 @@ func NewTypedLoader[T any](batchFetchFunc BatchFetchFuncTyped[T], errorMessage s
 	}
 
 	return &TypedLoader[T]{
-		Loader: dataloader.NewBatchedLoader[string, []T](
+		Loader: dataloader.NewBatchedLoader(
 			batchFn,
 			//nolint:mnd // default is 0, need to set a value
 			dataloader.WithBatchCapacity[string, []T](100),

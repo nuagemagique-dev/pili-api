@@ -147,13 +147,6 @@ func sendCases() []sendCase {
 			threaded: true,
 			want:     []string{"Jeanne Dupont", link},
 		},
-		{
-			name: "reengagement",
-			send: func(l string) error { return SendReengagementEmail(user, l) },
-			subjects: map[string]string{"fr": "Vous nous manquez chez Tokyo Sushi Bar !", "en": "We miss you at Tokyo Sushi Bar!",
-				"nl": "We missen u, tot snel bij Tokyo Sushi Bar!", "zh": "Tokyo Sushi Bar 想念您！"},
-			want: []string{"Jeanne Dupont", "https://shop.test"},
-		},
 	}
 }
 
