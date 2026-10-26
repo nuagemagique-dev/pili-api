@@ -414,8 +414,9 @@ func main() {
 		MFAConfirmTOTP: auth.ConfirmTOTPHandler,
 		MFARemoveTOTP:  auth.RemoveTOTPHandler,
 
-		POSDeviceLogin:    posHandler.DeviceLogin,
-		POSUpdateFCMToken: posHandler.UpdateFCMToken,
+		POSDeviceLogin:           posHandler.DeviceLogin,
+		POSUpdateFCMToken:        posHandler.UpdateFCMToken,
+		POSUpdateFCMInstallation: posHandler.UpdateFCMInstallation,
 
 		PaymentWebhook: paymentHandler.UpdatePaymentStatusHandler,
 		ImagePreview:   images.PreviewHandler,

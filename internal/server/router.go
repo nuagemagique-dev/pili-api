@@ -67,8 +67,9 @@ type Handlers struct {
 	MFAConfirmTOTP gin.HandlerFunc
 	MFARemoveTOTP  gin.HandlerFunc
 
-	POSDeviceLogin    gin.HandlerFunc
-	POSUpdateFCMToken gin.HandlerFunc
+	POSDeviceLogin           gin.HandlerFunc
+	POSUpdateFCMToken        gin.HandlerFunc
+	POSUpdateFCMInstallation gin.HandlerFunc
 
 	PaymentWebhook gin.HandlerFunc
 	ImagePreview   gin.HandlerFunc
@@ -197,6 +198,7 @@ func New(cfg Config, h Handlers) (*gin.Engine, func(), error) {
 	posLimiter := middleware.NewRateLimiter(30.0/60, 10) // 30 req/min per IP
 	api.POST("/pos/auth/device-login", posLimiter.Middleware(), h.POSDeviceLogin)
 	api.PATCH("/pos/devices/fcm-token", posLimiter.Middleware(), h.POSUpdateFCMToken)
+	api.PATCH("/pos/devices/fcm-installation", posLimiter.Middleware(), h.POSUpdateFCMInstallation)
 
 	// Other endpoints
 	// Mollie's webhook retries are retried ~25 times over 2 days on failure,

@@ -109,6 +109,32 @@ func (s *Service) GetActiveFCMTokens(ctx context.Context) ([]string, error) {
 	return s.devices.FindActiveFCMTokens(ctx)
 }
 
+// FCMInstallationInput carries the Firebase Installation ID (FCM direct send) and HMAC proof
+// from the device.
+type FCMInstallationInput struct {
+	DeviceID  uuid.UUID
+	FID       string
+	Timestamp int64
+	Nonce     string
+	HMAC      string
+}
+
+// UpdateDeviceFCMInstallationID validates the HMAC and stores the device's Firebase Installation
+// ID in place of its FCM token. The signed payload names the kind ("fid") so a signature made
+// for a token can never be replayed as an installation ID, or the other way round.
+func (s *Service) UpdateDeviceFCMInstallationID(ctx context.Context, in FCMInstallationInput) error {
+	payload := fmt.Sprintf("%s|fid|%s|%d|%s", in.DeviceID, in.FID, in.Timestamp, in.Nonce)
+	if _, err := s.verifyDeviceRequest(ctx, in.DeviceID, in.Timestamp, in.Nonce, in.HMAC, payload); err != nil {
+		return err
+	}
+	return s.devices.UpdateFCMInstallationID(ctx, in.DeviceID, in.FID)
+}
+
+// GetActiveFCMInstallationIDs returns the Firebase Installation IDs of all non-revoked POS devices.
+func (s *Service) GetActiveFCMInstallationIDs(ctx context.Context) ([]string, error) {
+	return s.devices.FindActiveFCMInstallationIDs(ctx)
+}
+
 // ---- shared helpers
 
 func (s *Service) verifyDeviceRequest(

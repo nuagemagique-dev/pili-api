@@ -77,7 +77,7 @@ func (r *Resolver) SendNewOrderPush(order *orderDomain.Order) {
 			}
 		}
 
-		// POS devices (Sunmi handhelds).
+		// POS devices (Sunmi handhelds): an FCM token, or, on FCM direct send, an installation ID.
 		if r.PosService != nil && r.FCMClient != nil {
 			posTokens, posErr := r.PosService.GetActiveFCMTokens(context.Background())
 			if posErr != nil {
@@ -86,17 +86,37 @@ func (r *Resolver) SendNewOrderPush(order *orderDomain.Order) {
 					zap.Error(posErr),
 				)
 			}
+			posFids, fidErr := r.PosService.GetActiveFCMInstallationIDs(context.Background())
+			if fidErr != nil {
+				zap.L().Warn("failed to fetch POS FCM installation IDs",
+					zap.String("order_id", order.ID.String()),
+					zap.Error(fidErr),
+				)
+			}
 			zap.L().Info("sending POS FCM pushes",
 				zap.String("order_id", order.ID.String()),
 				zap.Int("token_count", len(posTokens)),
+				zap.Int("installation_count", len(posFids)),
 			)
-			for _, token := range posTokens {
-				if pushErr := r.FCMClient.SendAlert(token, msg.Title, msg.Body, data); pushErr != nil {
+			send := func(to string, viaFid bool) {
+				var pushErr error
+				if viaFid {
+					pushErr = r.FCMClient.SendAlertToInstallation(to, msg.Title, msg.Body, data)
+				} else {
+					pushErr = r.FCMClient.SendAlert(to, msg.Title, msg.Body, data)
+				}
+				if pushErr != nil {
 					zap.L().Warn("failed to send POS FCM push",
 						zap.String("order_id", order.ID.String()),
 						zap.Error(pushErr),
 					)
 				}
+			}
+			for _, token := range posTokens {
+				send(token, false)
+			}
+			for _, fid := range posFids {
+				send(fid, true)
 			}
 		}
 	}()

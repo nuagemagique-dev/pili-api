@@ -42,6 +42,14 @@ type fcmTokenDTO struct {
 	HMAC      string `json:"hmac"      binding:"required"`
 }
 
+type fcmInstallationDTO struct {
+	DeviceID  string `json:"deviceId"  binding:"required,uuid"`
+	FID       string `json:"fid"       binding:"required"`
+	Timestamp int64  `json:"timestamp" binding:"required"`
+	Nonce     string `json:"nonce"     binding:"required"`
+	HMAC      string `json:"hmac"      binding:"required"`
+}
+
 // ---- endpoints
 
 // DeviceLogin trades an HMAC-signed proof of possession for an access token.
@@ -90,6 +98,32 @@ func (h *Handler) UpdateFCMToken(c *gin.Context) {
 	if err := h.svc.UpdateDeviceFCMToken(c.Request.Context(), application.FCMTokenInput{
 		DeviceID:  deviceID,
 		FCMToken:  body.FCMToken,
+		Timestamp: body.Timestamp,
+		Nonce:     body.Nonce,
+		HMAC:      body.HMAC,
+	}); err != nil {
+		respondAuthError(c, err)
+		return
+	}
+	c.Status(http.StatusNoContent)
+}
+
+// UpdateFCMInstallation registers or refreshes the device's Firebase Installation ID (FCM
+// direct send), replacing its FCM token. HMAC-signed like UpdateFCMToken, with "fid" in the payload.
+func (h *Handler) UpdateFCMInstallation(c *gin.Context) {
+	var body fcmInstallationDTO
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	deviceID, err := uuid.Parse(body.DeviceID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid deviceId"})
+		return
+	}
+	if err := h.svc.UpdateDeviceFCMInstallationID(c.Request.Context(), application.FCMInstallationInput{
+		DeviceID:  deviceID,
+		FID:       body.FID,
 		Timestamp: body.Timestamp,
 		Nonce:     body.Nonce,
 		HMAC:      body.HMAC,

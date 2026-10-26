@@ -89,8 +89,9 @@ func handlers() server.Handlers {
 		MFAConfirmTOTP: stub("MFAConfirmTOTP"),
 		MFARemoveTOTP:  stub("MFARemoveTOTP"),
 
-		POSDeviceLogin:    stub("POSDeviceLogin"),
-		POSUpdateFCMToken: stub("POSUpdateFCMToken"),
+		POSDeviceLogin:           stub("POSDeviceLogin"),
+		POSUpdateFCMToken:        stub("POSUpdateFCMToken"),
+		POSUpdateFCMInstallation: stub("POSUpdateFCMInstallation"),
 
 		PaymentWebhook: stub("PaymentWebhook"),
 		ImagePreview:   stub("ImagePreview"),
@@ -181,6 +182,7 @@ var routes = []route{
 
 	{http.MethodPost, "/api/v1/pos/auth/device-login", "POSDeviceLogin", false, posBurst},
 	{http.MethodPatch, "/api/v1/pos/devices/fcm-token", "POSUpdateFCMToken", false, posBurst},
+	{http.MethodPatch, "/api/v1/pos/devices/fcm-installation", "POSUpdateFCMInstallation", false, posBurst},
 
 	{http.MethodPost, "/api/v1/payments/webhook", "PaymentWebhook", false, webhookBurst},
 	{http.MethodPost, "/api/v1/images/preview", "ImagePreview", true, 0},

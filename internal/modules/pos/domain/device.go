@@ -21,6 +21,10 @@ type Device struct {
 	RevokedAt         *time.Time `db:"revoked_at"`
 	FCMToken          *string    `db:"fcm_token"`
 	FCMTokenUpdatedAt *time.Time `db:"fcm_token_updated_at"`
+	// FCMFid is the Firebase Installation ID the device registered for direct send. A device
+	// has an FCM token or an FID, never both: storing one clears the other.
+	FCMFid          *string    `db:"fcm_fid"`
+	FCMFidUpdatedAt *time.Time `db:"fcm_fid_updated_at"`
 }
 
 // DeviceRepository is a narrow interface used by the service layer.
@@ -29,4 +33,6 @@ type DeviceRepository interface {
 	TouchLastSeen(ctx context.Context, id uuid.UUID) error
 	UpdateFCMToken(ctx context.Context, deviceID uuid.UUID, token string) error
 	FindActiveFCMTokens(ctx context.Context) ([]string, error)
+	UpdateFCMInstallationID(ctx context.Context, deviceID uuid.UUID, fid string) error
+	FindActiveFCMInstallationIDs(ctx context.Context) ([]string, error)
 }
