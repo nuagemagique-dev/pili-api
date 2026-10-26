@@ -33,7 +33,8 @@ func (r *DeviceRepository) TouchLastSeen(ctx context.Context, id uuid.UUID) erro
 }
 
 func (r *DeviceRepository) UpdateFCMToken(ctx context.Context, deviceID uuid.UUID, token string) error {
-	const q = `UPDATE pos_devices SET fcm_token = $2, fcm_token_updated_at = now() WHERE id = $1 AND revoked_at IS NULL`
+	const q = `UPDATE pos_devices SET fcm_token = $2, fcm_token_updated_at = now(), fcm_fid = NULL, fcm_fid_updated_at = NULL
+		WHERE id = $1 AND revoked_at IS NULL`
 	_, err := r.pool.ForContext(ctx).ExecContext(ctx, q, deviceID, token)
 	return err
 }
@@ -45,4 +46,22 @@ func (r *DeviceRepository) FindActiveFCMTokens(ctx context.Context) ([]string, e
 		return nil, err
 	}
 	return tokens, nil
+}
+
+// UpdateFCMInstallationID stores the device's Firebase Installation ID and drops its FCM token,
+// so the device is pushed once, at the address it registered last.
+func (r *DeviceRepository) UpdateFCMInstallationID(ctx context.Context, deviceID uuid.UUID, fid string) error {
+	const q = `UPDATE pos_devices SET fcm_fid = $2, fcm_fid_updated_at = now(), fcm_token = NULL, fcm_token_updated_at = NULL
+		WHERE id = $1 AND revoked_at IS NULL`
+	_, err := r.pool.ForContext(ctx).ExecContext(ctx, q, deviceID, fid)
+	return err
+}
+
+func (r *DeviceRepository) FindActiveFCMInstallationIDs(ctx context.Context) ([]string, error) {
+	const q = `SELECT fcm_fid FROM pos_devices WHERE revoked_at IS NULL AND fcm_fid IS NOT NULL`
+	var fids []string
+	if err := r.pool.ForContext(ctx).SelectContext(ctx, &fids, q); err != nil {
+		return nil, err
+	}
+	return fids, nil
 }

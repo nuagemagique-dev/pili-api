@@ -36,10 +36,24 @@ func NewClient() (*Client, error) {
 // SendAlert sends a push notification to an Android device via FCM.
 // Returns ErrTokenInvalid if FCM reports the registration token as invalid/unregistered.
 func (c *Client) SendAlert(registrationToken, title, body string, data map[string]string) error {
-	message := &messaging.Message{
-		// Devices register FCM registration tokens, not Firebase Installation IDs,
-		// so Token (not Fid) is still the right target field.
-		Token: registrationToken, //nolint:staticcheck // SA1019: see comment above
+	message := alertMessage(title, body, data)
+	// The customer app registers FCM registration tokens, not Firebase Installation IDs, so Token
+	// is still the right target field for it (the POS handheld uses SendAlertToInstallation).
+	message.Token = registrationToken //nolint:staticcheck // SA1019: see comment above
+	return c.sendAlert(message)
+}
+
+// SendAlertToInstallation sends the same push notification as SendAlert to a Firebase
+// Installation ID (FCM direct send, the address a device registers through
+// FirebaseMessaging.register()). Returns ErrTokenInvalid if FCM reports the ID as unregistered.
+func (c *Client) SendAlertToInstallation(fid, title, body string, data map[string]string) error {
+	message := alertMessage(title, body, data)
+	message.Fid = fid
+	return c.sendAlert(message)
+}
+
+func alertMessage(title, body string, data map[string]string) *messaging.Message {
+	return &messaging.Message{
 		Notification: &messaging.Notification{
 			Title: title,
 			Body:  body,
@@ -53,7 +67,9 @@ func (c *Client) SendAlert(registrationToken, title, body string, data map[strin
 			},
 		},
 	}
+}
 
+func (c *Client) sendAlert(message *messaging.Message) error {
 	_, err := c.msgClient.Send(context.Background(), message)
 	if err != nil {
 		if messaging.IsUnregistered(err) || messaging.IsInvalidArgument(err) {

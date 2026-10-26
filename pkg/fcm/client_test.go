@@ -70,6 +70,31 @@ func TestSendAlert(t *testing.T) {
 	})
 }
 
+func TestSendAlertToInstallation(t *testing.T) {
+	t.Run("addresses the installation ID with the same notification as SendAlert", func(t *testing.T) {
+		srv := fcmtest.New(t, 200, okResp)
+		c := newTestClient(t, srv)
+
+		require.NoError(t, c.SendAlertToInstallation("fid-1", "New order", "Awaiting", map[string]string{"orderId": "o-1"}))
+
+		msg := srv.Requests()[0].Payload
+		require.Equal(t, "fid-1", msg["fid"])
+		require.NotContains(t, msg, "token")
+		require.Equal(t, map[string]any{"title": "New order", "body": "Awaiting"}, msg["notification"])
+		require.Equal(t, map[string]any{"orderId": "o-1"}, msg["data"])
+		require.Equal(t, map[string]any{
+			"priority":     "high",
+			"notification": map[string]any{"sound": "default", "channel_id": "orders"},
+		}, msg["android"])
+		require.Len(t, srv.PushesTo("fid-1"), 1)
+	})
+
+	t.Run("an unregistered installation maps to ErrTokenInvalid", func(t *testing.T) {
+		c := newTestClient(t, fcmtest.New(t, 404, fcmError("NOT_FOUND", "UNREGISTERED")))
+		require.ErrorIs(t, c.SendAlertToInstallation("dead", "t", "b", nil), ErrTokenInvalid)
+	})
+}
+
 func TestSendDataMessage(t *testing.T) {
 	t.Run("sends a data-only message (no notification block)", func(t *testing.T) {
 		srv := fcmtest.New(t, 200, okResp)

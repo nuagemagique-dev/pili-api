@@ -40,6 +40,7 @@ type fakeDevices struct {
 	device  *domain.Device
 	findErr error
 	fcm     string
+	fid     string
 	fcmErr  error
 }
 
@@ -52,6 +53,10 @@ func (f *fakeDevices) FindByID(context.Context, uuid.UUID) (*domain.Device, erro
 func (f *fakeDevices) TouchLastSeen(context.Context, uuid.UUID) error { return nil }
 func (f *fakeDevices) UpdateFCMToken(_ context.Context, _ uuid.UUID, tok string) error {
 	f.fcm = tok
+	return f.fcmErr
+}
+func (f *fakeDevices) UpdateFCMInstallationID(_ context.Context, _ uuid.UUID, fid string) error {
+	f.fid = fid
 	return f.fcmErr
 }
 
@@ -73,6 +78,7 @@ func newEnv(t *testing.T) *env {
 	r := gin.New()
 	r.POST("/pos/auth/device-login", h.DeviceLogin)
 	r.PATCH("/pos/devices/fcm-token", h.UpdateFCMToken) // PATCH, as cmd/app/main.go registers it
+	r.PATCH(fcmInstallationPath, h.UpdateFCMInstallation)
 	return &env{router: r, repo: repo, id: id, key: sum[:]}
 }
 
@@ -91,7 +97,7 @@ func (e *env) post(path string, body any) *httptest.ResponseRecorder {
 		_ = json.NewEncoder(&buf).Encode(b)
 	}
 	method := http.MethodPost
-	if path == fcmTokenPath {
+	if path == fcmTokenPath || path == fcmInstallationPath {
 		method = http.MethodPatch
 	}
 	req := httptest.NewRequest(method, path, &buf)
@@ -103,7 +109,10 @@ func (e *env) post(path string, body any) *httptest.ResponseRecorder {
 
 const nonce = "0123456789abcdef-nonce"
 
-const fcmTokenPath = "/pos/devices/fcm-token"
+const (
+	fcmTokenPath        = "/pos/devices/fcm-token"
+	fcmInstallationPath = "/pos/devices/fcm-installation"
+)
 
 func (e *env) loginBody(ts int64) map[string]any {
 	return map[string]any{
@@ -116,6 +125,13 @@ func (e *env) fcmBody(ts int64, token string) map[string]any {
 	return map[string]any{
 		"deviceId": e.id.String(), "fcmToken": token, "timestamp": ts, "nonce": "n",
 		"hmac": e.sign(fmt.Sprintf("%s|%s|%d|%s", e.id, token, ts, "n")),
+	}
+}
+
+func (e *env) fidBody(ts int64, fid string) map[string]any {
+	return map[string]any{
+		"deviceId": e.id.String(), "fid": fid, "timestamp": ts, "nonce": "n",
+		"hmac": e.sign(fmt.Sprintf("%s|fid|%s|%d|%s", e.id, fid, ts, "n")),
 	}
 }
 
@@ -222,6 +238,43 @@ func TestUpdateFCMTokenHandler(t *testing.T) {
 		e := newEnv(t)
 		e.repo.fcmErr = errors.New("password authentication failed for user")
 		rec := e.post("/pos/devices/fcm-token", e.fcmBody(now(), "fcm-xyz"))
+		assert.Equal(t, http.StatusInternalServerError, rec.Code)
+		assert.JSONEq(t, `{"error":"internal error"}`, rec.Body.String())
+	})
+}
+
+func TestUpdateFCMInstallationHandler(t *testing.T) {
+	now := func() int64 { return time.Now().UnixMilli() }
+
+	t.Run("stores the installation ID and answers 204", func(t *testing.T) {
+		e := newEnv(t)
+		rec := e.post(fcmInstallationPath, e.fidBody(now(), "fid-xyz"))
+		assert.Equal(t, http.StatusNoContent, rec.Code, rec.Body.String())
+		assert.Equal(t, "fid-xyz", e.repo.fid)
+	})
+
+	t.Run("malformed bodies are 400", func(t *testing.T) {
+		e := newEnv(t)
+		assert.Equal(t, http.StatusBadRequest, e.post(fcmInstallationPath, "{").Code)
+		assert.Equal(t, http.StatusBadRequest, e.post(fcmInstallationPath, e.fcmBody(now(), "fid-xyz")).Code, "a token body has no fid")
+		assert.Equal(t, http.StatusBadRequest, e.post(fcmInstallationPath, map[string]any{
+			"deviceId": "nope", "fid": "f", "timestamp": 1, "nonce": "n", "hmac": "h",
+		}).Code)
+		assert.Empty(t, e.repo.fid)
+	})
+
+	t.Run("an unauthenticated device is 403 and nothing is stored", func(t *testing.T) {
+		e := newEnv(t)
+		body := e.fidBody(now(), "fid-xyz")
+		body["fid"] = "fid-other"
+		assert.Equal(t, http.StatusForbidden, e.post(fcmInstallationPath, body).Code)
+		assert.Empty(t, e.repo.fid)
+	})
+
+	t.Run("a storage failure is 500 without leaking the error", func(t *testing.T) {
+		e := newEnv(t)
+		e.repo.fcmErr = errors.New("password authentication failed for user")
+		rec := e.post(fcmInstallationPath, e.fidBody(now(), "fid-xyz"))
 		assert.Equal(t, http.StatusInternalServerError, rec.Code)
 		assert.JSONEq(t, `{"error":"internal error"}`, rec.Body.String())
 	})
