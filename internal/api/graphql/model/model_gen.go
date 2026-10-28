@@ -122,6 +122,7 @@ type CreateOrderInput struct {
 	CouponCode         *string                 `json:"couponCode,omitempty"`
 	CashPaymentAmount  *string                 `json:"cashPaymentAmount,omitempty"`
 	PaymentRedirectURL *string                 `json:"paymentRedirectUrl,omitempty"`
+	IdempotencyKey     *string                 `json:"idempotencyKey,omitempty"`
 }
 
 type CreateOrderItemInput struct {
