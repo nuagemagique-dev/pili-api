@@ -103,6 +103,9 @@ input CreateOrderInput {
     cashPaymentAmount: String
     # Custom redirect URL for Mollie payment (native apps use custom URL scheme)
     paymentRedirectUrl: String
+    # Client-generated key of this checkout attempt (8 to 64 chars). Retrying with the same key
+    # returns the order already placed with it instead of placing a second one.
+    idempotencyKey: String
 }
 
 input CreateOrderItemInput {

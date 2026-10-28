@@ -19,6 +19,8 @@ type OrderService interface {
 	GetPaginatedOrders(ctx context.Context, page int, limit int, userID *uuid.UUID) ([]*domain.Order, error)
 	UpdateOrder(ctx context.Context, orderID uuid.UUID, newStatus *domain.OrderStatus, estimatedReadyTime *time.Time, cancellationReason *domain.OrderCancellationReason) error
 	GetOrderByID(ctx context.Context, orderID uuid.UUID) (*domain.Order, *[]domain.OrderProductRaw, error)
+	// GetOrderByIdempotencyKey returns the user's order placed with this checkout key, nil if none.
+	GetOrderByIdempotencyKey(ctx context.Context, userID uuid.UUID, key string) (*domain.Order, error)
 	GetStatusHistory(ctx context.Context, orderID uuid.UUID) ([]*domain.OrderStatusHistory, error)
 
 	DeleteOrder(ctx context.Context, orderID uuid.UUID) error
@@ -79,6 +81,10 @@ func (s *orderService) CreateOrder(ctx context.Context, o *domain.Order, op *[]d
 	}
 
 	return order, orderProducts, nil
+}
+
+func (s *orderService) GetOrderByIdempotencyKey(ctx context.Context, userID uuid.UUID, key string) (*domain.Order, error) {
+	return s.repo.FindByIdempotencyKey(ctx, userID, key)
 }
 
 func (s *orderService) DeleteOrder(ctx context.Context, orderID uuid.UUID) error {

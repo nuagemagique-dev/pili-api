@@ -29,6 +29,9 @@ type OrderRepository interface {
 	Save(ctx context.Context, order *Order, orderProducts *[]OrderProductRaw) (*Order, *[]OrderProductRaw, error)
 	Update(ctx context.Context, order *Order) error
 	FindByID(ctx context.Context, orderID uuid.UUID) (*Order, *[]OrderProductRaw, error)
+	// FindByIdempotencyKey returns the user's order placed with this checkout key, or nil when
+	// there is none.
+	FindByIdempotencyKey(ctx context.Context, userID uuid.UUID, key string) (*Order, error)
 	FindPaginated(ctx context.Context, page int, limit int, userID *uuid.UUID) ([]*Order, error)
 	FindFiltered(ctx context.Context, filter OrderHistoryFilter) ([]*Order, *OrderHistorySummary, error)
 	FindByOrderIDs(ctx context.Context, orderIDs []string) (map[string][]*OrderProductRaw, error)

@@ -84,6 +84,9 @@ type Order struct {
 	// IsTest flags orders placed by store-review accounts. TEMPORARY (revert
 	// after launch): such orders are hidden from staff and auto-cancelled.
 	IsTest bool `db:"is_test" json:"isTest"`
+	// IdempotencyKey is the client's key for the checkout attempt that placed the order (see
+	// CreateOrderInput.idempotencyKey). Unique per customer.
+	IdempotencyKey *string `db:"idempotency_key" json:"-"`
 }
 
 type OrderStatusHistory struct {
