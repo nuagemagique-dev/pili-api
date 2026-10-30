@@ -35,7 +35,7 @@ require (
 	golang.org/x/oauth2 v0.37.0
 	golang.org/x/text v0.43.0
 	golang.org/x/time v0.16.0
-	google.golang.org/api v0.308.0
+	google.golang.org/api v0.309.0
 	modernc.org/sqlite v1.61.0
 )
 
@@ -61,7 +61,7 @@ require (
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/bmatcuk/doublestar/v4 v4.10.4 // indirect
 	github.com/bytedance/gopkg v0.1.4 // indirect
-	github.com/bytedance/sonic v1.15.4 // indirect
+	github.com/bytedance/sonic v1.15.5 // indirect
 	github.com/bytedance/sonic/loader v0.5.3 // indirect
 	github.com/cenkalti/backoff/v4 v4.3.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
@@ -110,7 +110,7 @@ require (
 	github.com/moby/docker-image-spec v1.3.1 // indirect
 	github.com/moby/moby/api v1.56.1 // indirect
 	github.com/moby/moby/client v0.6.2 // indirect
-	github.com/moby/sys/user v0.4.1 // indirect
+	github.com/moby/sys/user v0.5.0 // indirect
 	github.com/moby/term v0.5.2 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
