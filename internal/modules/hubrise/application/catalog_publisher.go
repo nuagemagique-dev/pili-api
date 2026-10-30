@@ -124,7 +124,7 @@ func (p *CatalogPublisher) connection(ctx context.Context) (*domain.Connection, 
 }
 
 func settingsOf(conn *domain.Connection) PublishSettings {
-	s := PublishSettings{Language: conn.CatalogLanguage, Images: conn.PublishImages}
+	s := PublishSettings{Language: conn.CatalogLanguage, Images: conn.PublishImages, PlatformPrices: conn.PlatformPrices}
 	if conn.VariantRef != nil {
 		s.VariantRef = *conn.VariantRef
 	}

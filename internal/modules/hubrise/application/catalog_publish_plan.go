@@ -26,6 +26,8 @@ type PublishSettings struct {
 	VariantRef string
 	// Images says whether product images travel with the catalog (phase 2).
 	Images bool
+	// PlatformPrices are the price lists of the delivery platforms, written next to the base prices.
+	PlatformPrices []domain.PlatformPrice
 }
 
 func (s PublishSettings) language() string {
@@ -179,7 +181,7 @@ type dCategory struct {
 	link  *domain.CatalogLink
 	name  string
 	hash  string
-	// names are the non empty names by language, for the translations of the description.
+	// names are the non empty names by language, for the tags of the other languages.
 	names map[string]string
 }
 

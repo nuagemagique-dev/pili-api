@@ -501,3 +501,13 @@ func TestContentHashesCarryTheVisibilityTheImportWanted(t *testing.T) {
 	withGroup.Groups = []domain.CatalogGroup{{Key: "S|L"}}
 	assert.Equal(t, visible.ProductHash(), withGroup.ProductHash(), "the option groups have their own hashes")
 }
+
+func TestCategoryNamesAreReadFromThePublishersTags(t *testing.T) {
+	raw := &hubrise.Catalog{Data: &hubrise.CatalogData{
+		Categories: []hubrise.Category{{Ref: "C", Name: "Sushis", Tags: []string{"name:zh:寿司", "name:en: Sushi ", "name:xx:No", "name:nl:", "name:", "menu"}}},
+		Products:   []hubrise.Product{product("P", "C", "Maki", sku("S", "5"))},
+	}}
+	got := application.MapCatalog(raw, application.MapOptions{Language: "fr"})
+	require.Len(t, got.Categories, 1)
+	assert.Equal(t, map[string]string{"fr": "Sushis", "zh": "寿司", "en": "Sushi"}, got.Categories[0].Names)
+}

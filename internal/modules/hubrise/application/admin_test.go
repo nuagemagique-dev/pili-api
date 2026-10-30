@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -1009,4 +1010,62 @@ func TestNewAdminDefaultsTheTokenClientToTheConfiguredAPI(t *testing.T) {
 	require.NoError(t, err, "the default client reaches the API base URL of the config (the mock)")
 	assert.False(t, res.RelinkRequired)
 	assert.NotNil(t, e.srv.Callback(hubrisetest.Token))
+}
+
+func TestUpdateSettingsChecksThePlatformPrices(t *testing.T) {
+	r := newAdminRig(t)
+	price := func(ref, name, percent string, round int64) domain.PlatformPrice {
+		return domain.PlatformPrice{VariantRef: ref, Name: name, MarkupPercent: decimal.RequireFromString(percent), RoundToCents: round}
+	}
+	update := func(list ...domain.PlatformPrice) error {
+		prices := domain.PlatformPrices(list)
+		_, err := r.admin.UpdateSettings(t.Context(), domain.SettingsPatch{PlatformPrices: &prices})
+		return err
+	}
+	for name, bad := range map[string]domain.PlatformPrice{
+		"no ref":     price(" ", "Uber", "30", 10),
+		"no name":    price("uber", " ", "30", 10),
+		"long ref":   price(strings.Repeat("x", 300), "Uber", "30", 10),
+		"reserved":   price("pili-hidden", "Uber", "30", 10),
+		"negative":   price("uber", "Uber", "-1", 10),
+		"over 100":   price("uber", "Uber", "101", 10),
+		"round low":  price("uber", "Uber", "30", -1),
+		"round high": price("uber", "Uber", "30", 101),
+	} {
+		var invalid *domain.InvalidSettingError
+		require.ErrorAs(t, update(bad), &invalid, name)
+		assert.Equal(t, "platformPrices", invalid.Field, name)
+	}
+	var invalid *domain.InvalidSettingError
+	require.ErrorAs(t, update(price("uber", "Uber", "30", 10), price("uber", "Uber bis", "30", 10)), &invalid, "twice")
+
+	require.NoError(t, update(price(" uber ", " Uber Eats ", "30", 10)))
+	stored := r.conn().PlatformPrices
+	require.Len(t, stored, 1)
+	assert.Equal(t, "uber", stored[0].VariantRef)
+	assert.Equal(t, "Uber Eats", stored[0].Name)
+	assert.True(t, stored[0].MarkupPercent.Equal(decimal.NewFromInt(30)))
+	assert.EqualValues(t, 10, stored[0].RoundToCents)
+
+	// The shop's own price list cannot be a platform's, whichever is set first.
+	shop := "uber"
+	_, err := r.admin.UpdateSettings(t.Context(), domain.SettingsPatch{VariantRef: &shop})
+	require.ErrorAs(t, err, &invalid)
+	empty := domain.PlatformPrices{}
+	_, err = r.admin.UpdateSettings(t.Context(), domain.SettingsPatch{PlatformPrices: &empty, VariantRef: &shop})
+	require.NoError(t, err)
+	assert.Empty(t, r.conn().PlatformPrices, "an empty list removes them")
+	assert.Error(t, update(price("uber", "Uber", "30", 10)))
+}
+
+// A new markup changes no menu item, but the catalog has to go out again.
+func TestAChangedPriceListMarksTheMenuToPublish(t *testing.T) {
+	r := newAdminRig(t)
+	r.exec(`UPDATE hubrise_connection SET publish_catalog = TRUE`)
+	prices := domain.PlatformPrices{{VariantRef: "uber", Name: "Uber", MarkupPercent: decimal.NewFromInt(30)}}
+	_, err := r.admin.UpdateSettings(t.Context(), domain.SettingsPatch{PlatformPrices: &prices})
+	require.NoError(t, err)
+	var dirty int
+	require.NoError(t, r.db.GetContext(t.Context(), &dirty, `SELECT count(*) FROM hubrise_catalog_publish WHERE dirty_since IS NOT NULL`))
+	assert.Equal(t, 1, dirty)
 }

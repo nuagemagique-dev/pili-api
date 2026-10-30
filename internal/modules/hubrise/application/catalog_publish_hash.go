@@ -86,6 +86,9 @@ func LocalMenuHash(local *domain.LocalSnapshot, s PublishSettings) string {
 	}
 	sort.Strings(lines)
 	lines = append(lines, fmt.Sprintf("settings:%s|%s|%t", s.language(), s.VariantRef, s.Images))
+	for _, e := range s.PlatformPrices {
+		lines = append(lines, fmt.Sprintf("platform:%s|%s|%s|%d", e.VariantRef, e.Name, e.MarkupPercent.String(), e.RoundToCents))
+	}
 	return sumHex([]byte(strings.Join(lines, "\n")))
 }
 

@@ -64,6 +64,8 @@ type HubriseStatus {
     channelName: String
     deliveryChargeRef: String
     paymentFeeChargeRef: String
+    # The price lists published for the delivery platforms.
+    platformPrices: [HubrisePlatformPrice!]!
     importImages: Boolean!
 
     lastCatalogSyncAt: DateTime
@@ -134,6 +136,25 @@ input HubriseSettingsInput {
     channelName: String
     deliveryChargeRef: String
     paymentFeeChargeRef: String
+    # Replaces every price list; an empty list removes them.
+    platformPrices: [HubrisePlatformPriceInput!]
+}
+
+# A delivery platform's price list: a HubRise variant with the published prices plus a markup. The
+# platform's bridge in HubRise is set to read this variant.
+type HubrisePlatformPrice {
+    variantRef: String!
+    name: String!
+    markupPercent: Float!
+    # The marked up price is rounded up to a multiple of this many cents.
+    roundToCents: Int!
+}
+
+input HubrisePlatformPriceInput {
+    variantRef: String!
+    name: String!
+    markupPercent: Float!
+    roundToCents: Int!
 }
 
 # How far an import goes.

@@ -226,6 +226,13 @@ type ComplexityRoot struct {
 		State         func(childComplexity int) int
 	}
 
+	HubrisePlatformPrice struct {
+		MarkupPercent func(childComplexity int) int
+		Name          func(childComplexity int) int
+		RoundToCents  func(childComplexity int) int
+		VariantRef    func(childComplexity int) int
+	}
+
 	HubriseProductPublishInfo struct {
 		PublishedAt func(childComplexity int) int
 		Ref         func(childComplexity int) int
@@ -329,6 +336,7 @@ type ComplexityRoot struct {
 		LocationID             func(childComplexity int) int
 		LocationName           func(childComplexity int) int
 		PaymentFeeChargeRef    func(childComplexity int) int
+		PlatformPrices         func(childComplexity int) int
 		Publish                func(childComplexity int) int
 		RelinkRequired         func(childComplexity int) int
 		SyncCustomers          func(childComplexity int) int
@@ -1555,6 +1563,31 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.HubriseOutboxItem.State(childComplexity), true
 
+	case "HubrisePlatformPrice.markupPercent":
+		if e.ComplexityRoot.HubrisePlatformPrice.MarkupPercent == nil {
+			break
+		}
+
+		return e.ComplexityRoot.HubrisePlatformPrice.MarkupPercent(childComplexity), true
+	case "HubrisePlatformPrice.name":
+		if e.ComplexityRoot.HubrisePlatformPrice.Name == nil {
+			break
+		}
+
+		return e.ComplexityRoot.HubrisePlatformPrice.Name(childComplexity), true
+	case "HubrisePlatformPrice.roundToCents":
+		if e.ComplexityRoot.HubrisePlatformPrice.RoundToCents == nil {
+			break
+		}
+
+		return e.ComplexityRoot.HubrisePlatformPrice.RoundToCents(childComplexity), true
+	case "HubrisePlatformPrice.variantRef":
+		if e.ComplexityRoot.HubrisePlatformPrice.VariantRef == nil {
+			break
+		}
+
+		return e.ComplexityRoot.HubrisePlatformPrice.VariantRef(childComplexity), true
+
 	case "HubriseProductPublishInfo.publishedAt":
 		if e.ComplexityRoot.HubriseProductPublishInfo.PublishedAt == nil {
 			break
@@ -2048,6 +2081,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.HubriseStatus.PaymentFeeChargeRef(childComplexity), true
+	case "HubriseStatus.platformPrices":
+		if e.ComplexityRoot.HubriseStatus.PlatformPrices == nil {
+			break
+		}
+
+		return e.ComplexityRoot.HubriseStatus.PlatformPrices(childComplexity), true
 	case "HubriseStatus.publish":
 		if e.ComplexityRoot.HubriseStatus.Publish == nil {
 			break
@@ -4059,6 +4098,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 			graphql.NewInputUnmarshaler("CreateProductInput", ec.unmarshalInputCreateProductInput),
 			graphql.NewInputUnmarshaler("CustomerStatsInput", ec.unmarshalInputCustomerStatsInput),
 			graphql.NewInputUnmarshaler("DayScheduleInput", ec.unmarshalInputDayScheduleInput),
+			graphql.NewInputUnmarshaler("HubrisePlatformPriceInput", ec.unmarshalInputHubrisePlatformPriceInput),
 			graphql.NewInputUnmarshaler("HubriseSettingsInput", ec.unmarshalInputHubriseSettingsInput),
 			graphql.NewInputUnmarshaler("OpeningHoursInput", ec.unmarshalInputOpeningHoursInput),
 			graphql.NewInputUnmarshaler("OrderExtraInput", ec.unmarshalInputOrderExtraInput),
@@ -4543,6 +4583,20 @@ func (ec *executionContext) childFields_HubriseOutboxItem(ctx context.Context, f
 	return nil, fmt.Errorf("no field named %q was found under type HubriseOutboxItem", field.Name)
 }
 
+func (ec *executionContext) childFields_HubrisePlatformPrice(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "variantRef":
+		return ec.fieldContext_HubrisePlatformPrice_variantRef(ctx, field)
+	case "name":
+		return ec.fieldContext_HubrisePlatformPrice_name(ctx, field)
+	case "markupPercent":
+		return ec.fieldContext_HubrisePlatformPrice_markupPercent(ctx, field)
+	case "roundToCents":
+		return ec.fieldContext_HubrisePlatformPrice_roundToCents(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type HubrisePlatformPrice", field.Name)
+}
+
 func (ec *executionContext) childFields_HubriseProductPublishInfo(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 	switch field.Name {
 	case "state":
@@ -4741,6 +4795,8 @@ func (ec *executionContext) childFields_HubriseStatus(ctx context.Context, field
 		return ec.fieldContext_HubriseStatus_deliveryChargeRef(ctx, field)
 	case "paymentFeeChargeRef":
 		return ec.fieldContext_HubriseStatus_paymentFeeChargeRef(ctx, field)
+	case "platformPrices":
+		return ec.fieldContext_HubriseStatus_platformPrices(ctx, field)
 	case "importImages":
 		return ec.fieldContext_HubriseStatus_importImages(ctx, field)
 	case "lastCatalogSyncAt":
@@ -9130,6 +9186,98 @@ func (ec *executionContext) fieldContext_HubriseOutboxItem_parkedAt(_ context.Co
 	return graphql.NewScalarFieldContext("HubriseOutboxItem", field, false, false, "DateTime")
 }
 
+func (ec *executionContext) _HubrisePlatformPrice_variantRef(ctx context.Context, field graphql.CollectedField, obj *model.HubrisePlatformPrice) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_HubrisePlatformPrice_variantRef(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.VariantRef, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_HubrisePlatformPrice_variantRef(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("HubrisePlatformPrice", field, false, false, "String")
+}
+
+func (ec *executionContext) _HubrisePlatformPrice_name(ctx context.Context, field graphql.CollectedField, obj *model.HubrisePlatformPrice) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_HubrisePlatformPrice_name(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Name, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_HubrisePlatformPrice_name(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("HubrisePlatformPrice", field, false, false, "String")
+}
+
+func (ec *executionContext) _HubrisePlatformPrice_markupPercent(ctx context.Context, field graphql.CollectedField, obj *model.HubrisePlatformPrice) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_HubrisePlatformPrice_markupPercent(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.MarkupPercent, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v float64) graphql.Marshaler {
+			return ec.marshalNFloat2float64(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_HubrisePlatformPrice_markupPercent(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("HubrisePlatformPrice", field, false, false, "Float")
+}
+
+func (ec *executionContext) _HubrisePlatformPrice_roundToCents(ctx context.Context, field graphql.CollectedField, obj *model.HubrisePlatformPrice) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_HubrisePlatformPrice_roundToCents(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.RoundToCents, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v int) graphql.Marshaler {
+			return ec.marshalNInt2int(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_HubrisePlatformPrice_roundToCents(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("HubrisePlatformPrice", field, false, false, "Int")
+}
+
 func (ec *executionContext) _HubriseProductPublishInfo_state(ctx context.Context, field graphql.CollectedField, obj *model.HubriseProductPublishInfo) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -10971,6 +11119,38 @@ func (ec *executionContext) _HubriseStatus_paymentFeeChargeRef(ctx context.Conte
 }
 func (ec *executionContext) fieldContext_HubriseStatus_paymentFeeChargeRef(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	return graphql.NewScalarFieldContext("HubriseStatus", field, false, false, "String")
+}
+
+func (ec *executionContext) _HubriseStatus_platformPrices(ctx context.Context, field graphql.CollectedField, obj *model.HubriseStatus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_HubriseStatus_platformPrices(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.PlatformPrices, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v []*model.HubrisePlatformPrice) graphql.Marshaler {
+			return ec.marshalNHubrisePlatformPrice2ᚕᚖtsbᚑserviceᚋinternalᚋapiᚋgraphqlᚋmodelᚐHubrisePlatformPriceᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_HubriseStatus_platformPrices(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "HubriseStatus",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_HubrisePlatformPrice(ctx, field)
+		},
+	}
+	return fc, nil
 }
 
 func (ec *executionContext) _HubriseStatus_importImages(ctx context.Context, field graphql.CollectedField, obj *model.HubriseStatus) (ret graphql.Marshaler) {
@@ -21973,6 +22153,69 @@ func UnmarshalDayScheduleInput(ctx context.Context, raw any) (model.DayScheduleI
 	return out, err
 }
 
+func (ec *executionContext) unmarshalInputHubrisePlatformPriceInput(ctx context.Context, obj any) (model.HubrisePlatformPriceInput, error) {
+	var it model.HubrisePlatformPriceInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"variantRef", "name", "markupPercent", "roundToCents"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "variantRef":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("variantRef"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.VariantRef = data
+		case "name":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("name"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Name = data
+		case "markupPercent":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("markupPercent"))
+			data, err := ec.unmarshalNFloat2float64(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.MarkupPercent = data
+		case "roundToCents":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("roundToCents"))
+			data, err := ec.unmarshalNInt2int(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.RoundToCents = data
+		}
+	}
+	return it, nil
+}
+
+// UnmarshalHubrisePlatformPriceInput unmarshals raw into the HubrisePlatformPriceInput input type, using the
+// unmarshaler bound to ctx's request. Call it from a resolver to decode an input
+// object that was not passed as a field argument.
+//
+// ctx must come from a gqlgen request; outside one there is no unmarshaler to use
+// and the returned error says so.
+func UnmarshalHubrisePlatformPriceInput(ctx context.Context, raw any) (model.HubrisePlatformPriceInput, error) {
+	var out model.HubrisePlatformPriceInput
+	err := graphql.UnmarshalNamedInputFromContext(ctx, "HubrisePlatformPriceInput", raw, &out)
+	return out, err
+}
+
 func (ec *executionContext) unmarshalInputHubriseSettingsInput(ctx context.Context, obj any) (model.HubriseSettingsInput, error) {
 	var it model.HubriseSettingsInput
 	if obj == nil {
@@ -21984,7 +22227,7 @@ func (ec *executionContext) unmarshalInputHubriseSettingsInput(ctx context.Conte
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"enabled", "pushOrders", "syncStatus", "syncInventory", "syncCatalog", "syncCustomers", "catalogAutoImport", "autoRefundOnCancel", "importImages", "publishImages", "catalogLanguage", "variantRef", "channelName", "deliveryChargeRef", "paymentFeeChargeRef"}
+	fieldsInOrder := [...]string{"enabled", "pushOrders", "syncStatus", "syncInventory", "syncCatalog", "syncCustomers", "catalogAutoImport", "autoRefundOnCancel", "importImages", "publishImages", "catalogLanguage", "variantRef", "channelName", "deliveryChargeRef", "paymentFeeChargeRef", "platformPrices"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -22096,6 +22339,13 @@ func (ec *executionContext) unmarshalInputHubriseSettingsInput(ctx context.Conte
 				return it, err
 			}
 			it.PaymentFeeChargeRef = data
+		case "platformPrices":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("platformPrices"))
+			data, err := ec.unmarshalOHubrisePlatformPriceInput2ᚕᚖtsbᚑserviceᚋinternalᚋapiᚋgraphqlᚋmodelᚐHubrisePlatformPriceInputᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.PlatformPrices = data
 		}
 	}
 	return it, nil
@@ -24245,6 +24495,54 @@ func (ec *executionContext) _HubriseOutboxItem(ctx context.Context, sel ast.Sele
 	return out
 }
 
+var hubrisePlatformPriceImplementors = []string{"HubrisePlatformPrice"}
+
+func (ec *executionContext) _HubrisePlatformPrice(ctx context.Context, sel ast.SelectionSet, obj *model.HubrisePlatformPrice) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, hubrisePlatformPriceImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := graphql.NewDeferredGroup(ctx)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("HubrisePlatformPrice")
+		case "variantRef":
+			out.Values[i] = ec._HubrisePlatformPrice_variantRef(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "name":
+			out.Values[i] = ec._HubrisePlatformPrice_name(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "markupPercent":
+			out.Values[i] = ec._HubrisePlatformPrice_markupPercent(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "roundToCents":
+			out.Values[i] = ec._HubrisePlatformPrice_roundToCents(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	if n := len(deferred.Defers); n > 0 {
+		atomic.AddInt32(&ec.Deferred, int32(min(n, math.MaxInt32)))
+		ec.ProcessDeferredGroup(deferred)
+	}
+
+	return out
+}
+
 var hubriseProductPublishInfoImplementors = []string{"HubriseProductPublishInfo"}
 
 func (ec *executionContext) _HubriseProductPublishInfo(ctx context.Context, sel ast.SelectionSet, obj *model.HubriseProductPublishInfo) graphql.Marshaler {
@@ -24835,6 +25133,11 @@ func (ec *executionContext) _HubriseStatus(ctx context.Context, sel ast.Selectio
 		case "paymentFeeChargeRef":
 			out.Values[i] = ec._HubriseStatus_paymentFeeChargeRef(ctx, field, obj)
 			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "platformPrices":
+			out.Values[i] = ec._HubriseStatus_platformPrices(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
 		case "importImages":
@@ -28041,6 +28344,35 @@ func (ec *executionContext) marshalNHubriseOutboxState2tsbᚑserviceᚋinternal�
 	return v
 }
 
+func (ec *executionContext) marshalNHubrisePlatformPrice2ᚕᚖtsbᚑserviceᚋinternalᚋapiᚋgraphqlᚋmodelᚐHubrisePlatformPriceᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.HubrisePlatformPrice) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNHubrisePlatformPrice2ᚖtsbᚑserviceᚋinternalᚋapiᚋgraphqlᚋmodelᚐHubrisePlatformPrice(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNHubrisePlatformPrice2ᚖtsbᚑserviceᚋinternalᚋapiᚋgraphqlᚋmodelᚐHubrisePlatformPrice(ctx context.Context, sel ast.SelectionSet, v *model.HubrisePlatformPrice) graphql.Marshaler {
+	if v == nil {
+		graphql.AddInvalidNullError(ctx, "HubrisePlatformPrice!")
+		return graphql.Null
+	}
+	return ec._HubrisePlatformPrice(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalNHubrisePlatformPriceInput2ᚖtsbᚑserviceᚋinternalᚋapiᚋgraphqlᚋmodelᚐHubrisePlatformPriceInput(ctx context.Context, v any) (*model.HubrisePlatformPriceInput, error) {
+	res, err := ec.unmarshalInputHubrisePlatformPriceInput(ctx, v)
+	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
 func (ec *executionContext) unmarshalNHubrisePublishAction2tsbᚑserviceᚋinternalᚋapiᚋgraphqlᚋmodelᚐHubrisePublishAction(ctx context.Context, v any) (model.HubrisePublishAction, error) {
 	var res model.HubrisePublishAction
 	err := res.UnmarshalGQL(v)
@@ -29129,6 +29461,23 @@ func (ec *executionContext) marshalOHubriseOutboxState2ᚖtsbᚑserviceᚋintern
 		return graphql.Null
 	}
 	return v
+}
+
+func (ec *executionContext) unmarshalOHubrisePlatformPriceInput2ᚕᚖtsbᚑserviceᚋinternalᚋapiᚋgraphqlᚋmodelᚐHubrisePlatformPriceInputᚄ(ctx context.Context, v any) ([]*model.HubrisePlatformPriceInput, error) {
+	if v == nil {
+		return nil, nil
+	}
+	vSlice := graphql.CoerceList(v)
+	var err error
+	res := make([]*model.HubrisePlatformPriceInput, len(vSlice))
+	for i := range vSlice {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
+		res[i], err = ec.unmarshalNHubrisePlatformPriceInput2ᚖtsbᚑserviceᚋinternalᚋapiᚋgraphqlᚋmodelᚐHubrisePlatformPriceInput(ctx, vSlice[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
 }
 
 func (ec *executionContext) marshalOHubriseProductPublishInfo2ᚖtsbᚑserviceᚋinternalᚋapiᚋgraphqlᚋmodelᚐHubriseProductPublishInfo(ctx context.Context, sel ast.SelectionSet, v *model.HubriseProductPublishInfo) graphql.Marshaler {

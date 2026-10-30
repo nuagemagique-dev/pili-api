@@ -12,6 +12,7 @@ import (
 	"unicode"
 
 	"github.com/google/uuid"
+	"github.com/shopspring/decimal"
 	"go.uber.org/zap"
 
 	"tsb-service/internal/modules/hubrise/domain"
@@ -397,6 +398,58 @@ func validateSettings(p *domain.SettingsPatch) error {
 		}
 		*field = &v
 	}
+	if p.PlatformPrices != nil {
+		return validatePlatformPrices(*p.PlatformPrices)
+	}
+	return nil
+}
+
+// validatePlatformPrices checks and normalizes the price lists of the platforms.
+func validatePlatformPrices(list domain.PlatformPrices) error {
+	invalid := func(msg string) error {
+		return &domain.InvalidSettingError{Field: "platformPrices", Message: msg}
+	}
+	seen := map[string]bool{}
+	for i := range list {
+		e := &list[i]
+		e.VariantRef, e.Name = strings.TrimSpace(e.VariantRef), strings.TrimSpace(e.Name)
+		switch {
+		case e.VariantRef == "" || e.Name == "":
+			return invalid("every price list needs a variant ref and a name")
+		case len([]rune(e.VariantRef)) > maxSettingLength || len([]rune(e.Name)) > maxSettingLength:
+			return invalid(fmt.Sprintf("at most %d characters", maxSettingLength))
+		case e.VariantRef == hiddenVariantRef:
+			return invalid(hiddenVariantRef + " is reserved")
+		case seen[e.VariantRef]:
+			return invalid("the variant ref " + e.VariantRef + " appears twice")
+		case e.MarkupPercent.IsNegative() || e.MarkupPercent.GreaterThan(decimal.NewFromInt(100)):
+			return invalid("the markup goes from 0 to 100 percent")
+		case e.RoundToCents < 0 || e.RoundToCents > 100:
+			return invalid("the rounding goes from 1 to 100 cents")
+		}
+		seen[e.VariantRef] = true
+	}
+	return nil
+}
+
+// checkPriceLists refuses the shop's own price list as a platform's: the publisher writes the local
+// price into the first and the marked up price into the second.
+func checkPriceLists(before *domain.Connection, patch domain.SettingsPatch) error {
+	shop, prices := before.VariantRef, before.PlatformPrices
+	if patch.VariantRef != nil {
+		shop = patch.VariantRef
+	}
+	if patch.PlatformPrices != nil {
+		prices = *patch.PlatformPrices
+	}
+	if shop == nil {
+		return nil
+	}
+	for _, e := range prices {
+		if e.VariantRef == *shop {
+			return &domain.InvalidSettingError{Field: "platformPrices", Message: "the variant ref " + e.VariantRef + " is the shop's own price list"}
+		}
+	}
 	return nil
 }
 
@@ -414,6 +467,9 @@ func (a *Admin) UpdateSettings(ctx context.Context, patch domain.SettingsPatch) 
 	}
 	patch.PushOrdersSince = nil
 	if err := validateSettings(&patch); err != nil {
+		return nil, err
+	}
+	if err := checkPriceLists(before, patch); err != nil {
 		return nil, err
 	}
 	if patch.Enabled != nil && *patch.Enabled && !before.Enabled {
@@ -443,6 +499,11 @@ func (a *Admin) UpdateSettings(ctx context.Context, patch domain.SettingsPatch) 
 	}
 	if inventoryEffective(updated) && !inventoryEffective(before) {
 		a.restartInventoryBaseline(ctx)
+	}
+	if patch.PlatformPrices != nil && a.d.Publisher != nil {
+		if err := a.d.Publisher.MenuChanged(ctx); err != nil {
+			return nil, err
+		}
 	}
 	return updated, nil
 }

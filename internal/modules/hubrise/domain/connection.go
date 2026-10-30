@@ -61,6 +61,8 @@ type Connection struct {
 	ChannelName         *string `db:"channel_name"`
 	DeliveryChargeRef   *string `db:"delivery_charge_ref"`
 	PaymentFeeChargeRef *string `db:"payment_fee_charge_ref"`
+	// PlatformPrices are the price lists published for the delivery platforms.
+	PlatformPrices PlatformPrices `db:"platform_prices"`
 
 	CatalogHash              *string    `db:"catalog_hash"`
 	CatalogPreviewHash       *string    `db:"catalog_preview_hash"`
@@ -223,6 +225,8 @@ type SettingsPatch struct {
 	ChannelName         *string
 	DeliveryChargeRef   *string
 	PaymentFeeChargeRef *string
+	// PlatformPrices, when set, replaces the whole list.
+	PlatformPrices *PlatformPrices
 
 	// PushOrdersSince, when set, replaces the push_orders_since stamp.
 	PushOrdersSince *time.Time

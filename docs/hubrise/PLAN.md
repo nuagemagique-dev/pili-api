@@ -614,8 +614,9 @@ Tests: Up/Down/Up, the lock-timeout test for the `hubrise_connection` ALTER, no 
 | HubRise element and field | Rule |
 |---|---|
 | category `name` | owned: local name in `catalog_language` (fallback: first available language) |
-| category `description` | JSON convention `{"translations":{"fr":..,"en":..,"nl":..,"zh":..}}`: owned only when the base description is empty or already that JSON (other keys of the JSON are preserved, base languages without a local text are preserved); a plain-text description is never replaced (warning `CATEGORY_DESCRIPTION_KEPT`) |
-| category `parent_ref`, `tags`, `image_ids` | carried over; a new category is a root category; images per A15.8 |
+| category `description` | carried over, except that what earlier versions wrote there (a JSON object with `translations`) is removed: the bridges show it to customers (A16) |
+| category `tags` | carried over, except the `name:<lang>:<name>` tags, owned: the name in every language but the catalog language (A16) |
+| category `parent_ref`, `image_ids` | carried over; a new category is a root category; images per A15.8 |
 | category order | array position: owned categories take the slots owned categories occupied in the base, in local `order`; new ones go after the last owned one; foreign ones keep their slot |
 | product `name` (HubRise product) | owned for single-SKU products (local name); multi-SKU products (imported as "Product Sku" locals): local name = product name + " " + SKU name when it still starts with the product name, so the part after the prefix goes to `sku.name` and the product name is kept; a local name that does not start with the product name sets `sku.name` to the whole local name with warning `NAME_SPLIT_AMBIGUOUS` (SKU names are unique per product: a duplicate is a blocker) |
 | product `description` | owned for single-SKU products (catalog language); for multi-SKU products it is shared, so it is left alone and the text goes to the SKU `custom_fields.translations` only |
@@ -624,7 +625,7 @@ Tests: Up/Down/Up, the lock-timeout test for the `hubrise_connection` ALTER, no 
 | product `tags`, `nutrition`, `image_ids` (images off) | carried over; the visibility tags `hidden` and `web:hidden` are the only tags owned (below) |
 | SKU `ref` | the link ref (stable) |
 | SKU `price` | owned: local price as `"8.90 EUR"` (the currency of the base prices, `EUR` for an empty catalog). If `variant_ref` is set and the SKU has an unconditional price override for that variant (the rule the importer resolves), the local price is written into that rule instead and the base price is left, so the import mapping round-trips; all other `price_overrides` are carried over |
-| SKU `restrictions` | carried over untouched (time windows, `variant_refs`, `enabled`). Exception: a SKU still referenced by a preserved deal whose product was deleted locally is kept with `enabled = false` and reported as `RETAINED_BY_DEAL` |
+| SKU `restrictions` | carried over untouched (time windows, `variant_refs`, `enabled`). Exceptions: with platform price lists, a hidden SKU gets `variant_refs: ["pili-hidden"]` (A16); a SKU still referenced by a preserved deal whose product was deleted locally is kept with `enabled = false` and reported as `RETAINED_BY_DEAL` |
 | SKU `tags` | owned: `web:hidden` present iff the product is hidden (`is_visible = false`), which is how the importer reads "hidden" so a later import round-trips; the legacy `hidden` tag is removed when the product is visible; a product-level `hidden`/`web:hidden` tag is pushed down onto every SKU of that product the first time and removed from the product tag list; all other tags carried over |
 | SKU `custom_fields` | merged as a map: `code` owned (set when the local code is non-empty, removed when empty: the shop is the truth), `vat_category` owned, `translations.<lang>.name/description` owned for every language the product has a local text in (languages only HubRise has are kept; unknown keys inside an entry are kept), every other custom field carried over |
 | SKU `barcodes`, `weight`, `volume`, `nb_servings`, `price_overrides` (other rules), `option_list_refs` of foreign lists | carried over |
@@ -736,3 +737,11 @@ Dashboard: unit tests for `utils/hubrise.ts` and the three composables (every er
 ### A15.13 Task order
 
 Backend B1 to B11 and dashboard D1 to D9 are listed in the planner's structured output (the workers read that list; it is the order of the commits). The migration is `20261024190000_add_catalog_publish.sql`. The README runbook (section 2 ladder) gains a "dashboard-owned menu" chapter: switch, preview, first publish, what is preserved, what the EPOS sees, reconnect for `catalog.write`, account catalogs, external edits, rollback.
+
+## A16. Delivery platforms (2026-10-30)
+
+From the audit of the Just Eat, Deliveroo and Uber Eats bridges, see `docs/hubrise/PLATFORM_BRIDGES_AUDIT.md`.
+
+- **Platform price lists.** `hubrise_connection.platform_prices` (JSONB, migration `20261030120000`): variant ref, name, markup percent, rounding. The publisher makes sure each variant exists and writes one `price_overrides` rule per variant on every owned SKU and option; base prices stay the shop's and the POS keeps reading them. Other rules are carried over. A changed list marks the menu dirty and changes the local menu hash. The shop's own `variant_ref` may not be a platform's. A removed list leaves its old rules and variant behind: no bridge reads them.
+- **Hidden products.** The bridges ignore tags, so with price lists a hidden SKU is restricted to the variant `pili-hidden`, which no platform reads. Without a price list the bridges push everything: the plan warns `HIDDEN_ON_PLATFORMS`.
+- **Category names.** HubRise categories have no custom fields and the bridges show the description to customers, so the names in other languages move to tags (`name:zh:寿司`). The importer and pili-pos read the tags, then the old description convention. Non-ASCII tags are to be confirmed on the HubRise test location.

@@ -495,6 +495,34 @@ func TestUpdatingTheSettings(t *testing.T) {
 	assert.Equal(t, "size", *st.VariantRef, "and leaves the others")
 }
 
+func TestThePlatformPriceListsAreReadAndReplaced(t *testing.T) {
+	r := newHubriseAdminRig(t, true)
+	const fields = `platformPrices { variantRef name markupPercent roundToCents }`
+	type prices struct {
+		PlatformPrices []struct {
+			VariantRef    string  `json:"variantRef"`
+			Name          string  `json:"name"`
+			MarkupPercent float64 `json:"markupPercent"`
+			RoundToCents  int     `json:"roundToCents"`
+		} `json:"platformPrices"`
+	}
+
+	st := decode[prices](t, r.run(`mutation { updateHubriseSettings(input: { platformPrices: [
+		{ variantRef: " uber ", name: "Uber Eats", markupPercent: 27.5, roundToCents: 10 }
+	] }) { `+fields+` } }`, nil)["updateHubriseSettings"])
+	require.Len(t, st.PlatformPrices, 1)
+	assert.Equal(t, "uber", st.PlatformPrices[0].VariantRef)
+	assert.Equal(t, "Uber Eats", st.PlatformPrices[0].Name)
+	assert.InDelta(t, 27.5, st.PlatformPrices[0].MarkupPercent, 0)
+	assert.Equal(t, 10, st.PlatformPrices[0].RoundToCents)
+
+	st = decode[prices](t, r.run(`mutation { updateHubriseSettings(input: { syncStatus: true }) { `+fields+` } }`, nil)["updateHubriseSettings"])
+	assert.Len(t, st.PlatformPrices, 1, "an update that does not name them leaves them")
+
+	st = decode[prices](t, r.run(`mutation { updateHubriseSettings(input: { platformPrices: [] }) { `+fields+` } }`, nil)["updateHubriseSettings"])
+	assert.Empty(t, st.PlatformPrices)
+}
+
 func TestPushingOrdersBecomingEffectiveOnlyPushesLaterOrders(t *testing.T) {
 	r := newHubriseAdminRig(t, true, hubtest.WithFeatures(false, true, false, false, false))
 	r.exec(`UPDATE hubrise_connection SET push_orders_since = now() - interval '30 days'`)

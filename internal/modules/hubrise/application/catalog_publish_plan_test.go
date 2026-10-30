@@ -303,6 +303,15 @@ func TestFirstPublishWritesTheWholeMenuAndTheImporterReadsItBack(t *testing.T) {
 	w.roundTrip()
 }
 
+// The price lists of the platforms settle too: a second plan writes nothing.
+func TestPublishWithPlatformPricesIsIdempotent(t *testing.T) {
+	w := newPubWorld(t)
+	w.settings.PlatformPrices = []domain.PlatformPrice{{VariantRef: "uber", Name: "Uber Eats", MarkupPercent: pdec("30"), RoundToCents: 10}}
+	w.menu()
+	w.publish()
+	assert.False(t, w.plan().NeedsPut, "a second plan finds nothing to write")
+}
+
 func TestPublishIsIdempotent(t *testing.T) {
 	w := newPubWorld(t)
 	w.menu()

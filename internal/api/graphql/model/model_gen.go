@@ -289,6 +289,20 @@ type HubriseOutboxItem struct {
 	ParkedAt      *time.Time         `json:"parkedAt,omitempty"`
 }
 
+type HubrisePlatformPrice struct {
+	VariantRef    string  `json:"variantRef"`
+	Name          string  `json:"name"`
+	MarkupPercent float64 `json:"markupPercent"`
+	RoundToCents  int     `json:"roundToCents"`
+}
+
+type HubrisePlatformPriceInput struct {
+	VariantRef    string  `json:"variantRef"`
+	Name          string  `json:"name"`
+	MarkupPercent float64 `json:"markupPercent"`
+	RoundToCents  int     `json:"roundToCents"`
+}
+
 type HubriseProductPublishInfo struct {
 	State       HubrisePublishState `json:"state"`
 	PublishedAt *time.Time          `json:"publishedAt,omitempty"`
@@ -364,21 +378,22 @@ type HubrisePublishStatus struct {
 }
 
 type HubriseSettingsInput struct {
-	Enabled             *bool   `json:"enabled,omitempty"`
-	PushOrders          *bool   `json:"pushOrders,omitempty"`
-	SyncStatus          *bool   `json:"syncStatus,omitempty"`
-	SyncInventory       *bool   `json:"syncInventory,omitempty"`
-	SyncCatalog         *bool   `json:"syncCatalog,omitempty"`
-	SyncCustomers       *bool   `json:"syncCustomers,omitempty"`
-	CatalogAutoImport   *bool   `json:"catalogAutoImport,omitempty"`
-	AutoRefundOnCancel  *bool   `json:"autoRefundOnCancel,omitempty"`
-	ImportImages        *bool   `json:"importImages,omitempty"`
-	PublishImages       *bool   `json:"publishImages,omitempty"`
-	CatalogLanguage     *string `json:"catalogLanguage,omitempty"`
-	VariantRef          *string `json:"variantRef,omitempty"`
-	ChannelName         *string `json:"channelName,omitempty"`
-	DeliveryChargeRef   *string `json:"deliveryChargeRef,omitempty"`
-	PaymentFeeChargeRef *string `json:"paymentFeeChargeRef,omitempty"`
+	Enabled             *bool                        `json:"enabled,omitempty"`
+	PushOrders          *bool                        `json:"pushOrders,omitempty"`
+	SyncStatus          *bool                        `json:"syncStatus,omitempty"`
+	SyncInventory       *bool                        `json:"syncInventory,omitempty"`
+	SyncCatalog         *bool                        `json:"syncCatalog,omitempty"`
+	SyncCustomers       *bool                        `json:"syncCustomers,omitempty"`
+	CatalogAutoImport   *bool                        `json:"catalogAutoImport,omitempty"`
+	AutoRefundOnCancel  *bool                        `json:"autoRefundOnCancel,omitempty"`
+	ImportImages        *bool                        `json:"importImages,omitempty"`
+	PublishImages       *bool                        `json:"publishImages,omitempty"`
+	CatalogLanguage     *string                      `json:"catalogLanguage,omitempty"`
+	VariantRef          *string                      `json:"variantRef,omitempty"`
+	ChannelName         *string                      `json:"channelName,omitempty"`
+	DeliveryChargeRef   *string                      `json:"deliveryChargeRef,omitempty"`
+	PaymentFeeChargeRef *string                      `json:"paymentFeeChargeRef,omitempty"`
+	PlatformPrices      []*HubrisePlatformPriceInput `json:"platformPrices,omitempty"`
 }
 
 type HubriseStatus struct {
@@ -406,6 +421,7 @@ type HubriseStatus struct {
 	ChannelName            *string                 `json:"channelName,omitempty"`
 	DeliveryChargeRef      *string                 `json:"deliveryChargeRef,omitempty"`
 	PaymentFeeChargeRef    *string                 `json:"paymentFeeChargeRef,omitempty"`
+	PlatformPrices         []*HubrisePlatformPrice `json:"platformPrices"`
 	ImportImages           bool                    `json:"importImages"`
 	LastCatalogSyncAt      *time.Time              `json:"lastCatalogSyncAt,omitempty"`
 	LastEventAt            *time.Time              `json:"lastEventAt,omitempty"`

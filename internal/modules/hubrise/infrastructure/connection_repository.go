@@ -15,7 +15,7 @@ const connectionColumns = `enabled, access_token_enc, account_id, account_name, 
 	catalog_id, catalog_name, customer_list_id, customer_list_name, scope,
 	push_orders, sync_status, sync_inventory, sync_catalog, sync_customers, catalog_auto_import,
 	auto_refund_on_cancel, import_images, publish_catalog, publish_images, catalog_language, variant_ref, channel_name,
-	delivery_charge_ref, payment_fee_charge_ref, catalog_hash, catalog_preview_hash, catalog_preview_at,
+	delivery_charge_ref, payment_fee_charge_ref, platform_prices, catalog_hash, catalog_preview_hash, catalog_preview_at,
 	catalog_update_available_at, push_orders_since, inventory_baseline_at, relink_required_at,
 	last_catalog_sync_at, last_event_at, auth_error_at, last_error, callback_registered_at,
 	created_at, updated_at`
@@ -133,17 +133,26 @@ func (r *connectionRepository) UpdateSettings(ctx context.Context, p domain.Sett
 			push_orders_since = COALESCE($15, push_orders_since),
 			publish_images = COALESCE($16, publish_images),
 			publish_catalog = COALESCE($17, publish_catalog),
+			platform_prices = COALESCE($18::jsonb, platform_prices),
 			updated_at = now()
 		RETURNING `+connectionColumns,
 			p.Enabled, p.PushOrders, p.SyncStatus, p.SyncInventory, p.SyncCatalog, p.SyncCustomers,
 			p.CatalogAutoImport, p.AutoRefundOnCancel, p.ImportImages, p.CatalogLanguage,
 			p.VariantRef, p.ChannelName, p.DeliveryChargeRef, p.PaymentFeeChargeRef, p.PushOrdersSince,
-			p.PublishImages, p.PublishCatalog)
+			p.PublishImages, p.PublishCatalog, platformPricesArg(p.PlatformPrices))
 	})
 	if err != nil {
 		return nil, err
 	}
 	return &c, nil
+}
+
+// platformPricesArg is the JSON of a replacement list, NULL to keep the stored one.
+func platformPricesArg(p *domain.PlatformPrices) any {
+	if p == nil {
+		return nil
+	}
+	return p.JSON()
 }
 
 // resetPublisherSQL returns the publisher to "awaiting first publish" at $1.

@@ -189,8 +189,8 @@ func (m *mapper) walkCategories(in []hubrise.Category) *categoryIndex {
 	return ci
 }
 
-// categoryNames: the category name in the catalog language, and the other languages from the
-// description convention {"translations": {"fr": "...", "en": "..."}}.
+// categoryNames: the category name in the catalog language, and the other languages from the tags
+// name:zh:寿司, or the older description convention {"translations": {"fr": "...", "en": "..."}}.
 func (m *mapper) categoryNames(c hubrise.Category) map[string]string {
 	names := map[string]string{}
 	desc := strings.TrimSpace(c.Description)
@@ -202,6 +202,16 @@ func (m *mapper) categoryNames(c hubrise.Category) map[string]string {
 					names[lang] = name
 				}
 			}
+		}
+	}
+	for _, tag := range c.Tags {
+		rest, ok := strings.CutPrefix(tag, categoryNameTagPrefix)
+		if !ok {
+			continue
+		}
+		lang, name, ok := strings.Cut(rest, ":")
+		if name = strings.TrimSpace(name); ok && name != "" && slices.Contains(catalogLanguages, lang) {
+			names[lang] = name
 		}
 	}
 	if name := strings.TrimSpace(c.Name); name != "" {

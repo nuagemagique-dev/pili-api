@@ -204,9 +204,8 @@ type PublishedItemRepository interface {
 // Issue codes of the catalog publisher: the warnings and blockers of a plan (domain.Warning carries
 // them). Warnings never stop a publish, blockers do.
 const (
-	// WarnCategoryDescriptionKept: the HubRise category has a plain text description, which is never
-	// replaced; the translations of its name are not written.
-	WarnCategoryDescriptionKept WarningCode = "CATEGORY_DESCRIPTION_KEPT"
+	// WarnHiddenOnPlatforms: no platform price list is set, so the bridges push a hidden product too.
+	WarnHiddenOnPlatforms WarningCode = "HIDDEN_ON_PLATFORMS"
 	// WarnNameSplitAmbiguous: the local name of a multi-SKU product does not start with the HubRise
 	// product name, so the whole name became the SKU name.
 	WarnNameSplitAmbiguous WarningCode = "NAME_SPLIT_AMBIGUOUS"

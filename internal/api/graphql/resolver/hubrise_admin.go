@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/shopspring/decimal"
 
 	"tsb-service/internal/api/graphql/apperr"
 	"tsb-service/internal/api/graphql/model"
@@ -90,6 +91,12 @@ func toHubriseStatus(st *hubriseApplication.Status, available bool) *model.Hubri
 	out.VariantRef, out.ChannelName = c.VariantRef, c.ChannelName
 	out.DeliveryChargeRef, out.PaymentFeeChargeRef = c.DeliveryChargeRef, c.PaymentFeeChargeRef
 	out.ImportImages = c.ImportImages
+	out.PlatformPrices = make([]*model.HubrisePlatformPrice, 0, len(c.PlatformPrices))
+	for _, e := range c.PlatformPrices {
+		out.PlatformPrices = append(out.PlatformPrices, &model.HubrisePlatformPrice{
+			VariantRef: e.VariantRef, Name: e.Name, MarkupPercent: e.MarkupPercent.InexactFloat64(), RoundToCents: int(e.RoundToCents),
+		})
+	}
 	out.LastCatalogSyncAt, out.LastEventAt, out.AuthErrorAt = c.LastCatalogSyncAt, c.LastEventAt, c.AuthErrorAt
 	if c.LastError != nil {
 		msg := strings.TrimPrefix(*c.LastError, hubriseDomain.PendingReviewPrefix)
@@ -137,11 +144,26 @@ func (r *Resolver) updateHubriseSettings(ctx context.Context, in model.HubriseSe
 		CatalogLanguage: in.CatalogLanguage,
 		VariantRef:      in.VariantRef, ChannelName: in.ChannelName,
 		DeliveryChargeRef: in.DeliveryChargeRef, PaymentFeeChargeRef: in.PaymentFeeChargeRef,
+		PlatformPrices: platformPricesPatch(in.PlatformPrices),
 	})
 	if err != nil {
 		return nil, hubriseFail(ctx, err)
 	}
 	return r.hubriseStatus(ctx)
+}
+
+// platformPricesPatch is the replacement list of an update, nil when the update leaves it alone.
+func platformPricesPatch(in []*model.HubrisePlatformPriceInput) *hubriseDomain.PlatformPrices {
+	if in == nil {
+		return nil
+	}
+	out := make(hubriseDomain.PlatformPrices, 0, len(in))
+	for _, e := range in {
+		out = append(out, hubriseDomain.PlatformPrice{
+			VariantRef: e.VariantRef, Name: e.Name, MarkupPercent: decimal.NewFromFloat(e.MarkupPercent), RoundToCents: int64(e.RoundToCents),
+		})
+	}
+	return &out
 }
 
 // ---- catalog and inventory ----

@@ -155,10 +155,9 @@ func TestItemsWithoutNamesOrVatCategoryGetPlaceholders(t *testing.T) {
 	assert.Equal(t, "Options", p.list(p.warnedRefs()[0])["name"])
 	assert.Equal(t, "Option", asList(p.list(p.warnedRefs()[0])["options"])[0]["name"])
 	assert.Equal(t, []any{"web:hidden"}, p.sku("P2")["tags"])
-	// Only the categories with a name in another language than the catalog language carry the
-	// translations of the name.
-	assert.Contains(t, p.category("named")["description"], "Named EN")
-	assert.Nil(t, p.category("nameless")["description"])
+	// Only the categories with a name in another language than the catalog language carry it.
+	assert.Contains(t, p.category("named")["tags"], "name:en:Named EN")
+	assert.Nil(t, p.category("nameless")["tags"])
 }
 
 func (p planResult) warnedRefs() []string {
@@ -182,8 +181,9 @@ func TestARetiredLinkIsBroughtBackByThePublish(t *testing.T) {
 	assert.Equal(t, []int64{l.ID}, p.Unretire)
 }
 
-// The category descriptions of HubRise are never destroyed to write translations into them.
-func TestCategoryDescriptionsAreOnlyExtendedWhenTheyAreOurs(t *testing.T) {
+// The platforms show a category's description to the customers: the names of the other languages
+// travel as tags, what earlier versions wrote in the description leaves, the restaurant's text stays.
+func TestCategoryNamesOfOtherLanguagesAreTagsAndNeverADescription(t *testing.T) {
 	cat := func(n int, slug string) domain.LocalCategory {
 		return domain.LocalCategory{ID: puid(n), Slug: slug, Order: n, Names: ptexts(slug, slug+" en")}
 	}
@@ -196,22 +196,142 @@ func TestCategoryDescriptionsAreOnlyExtendedWhenTheyAreOurs(t *testing.T) {
 		links = append(links, linkOf(domain.EntityCategory, puid(n+1), slug, slug))
 	}
 	base := `{"categories":[
-	  {"ref":"empty","name":"empty"},
+	  {"ref":"empty","name":"empty","tags":["menu","name:en:old","name:nl:gone"]},
 	  {"ref":"json","name":"json","description":"{\"translations\":{\"nl\":\"jsonnl\"},\"other\":1}"},
 	  {"ref":"broken","name":"broken","description":"{not json"},
 	  {"ref":"plain","name":"plain","description":"Our best sushi"}]}`
 	p := planWith(t, application.PublishInput{Local: local, Links: links, Settings: application.PublishSettings{Language: "fr"}, Base: json.RawMessage(base)})
 
-	var empty, js map[string]any
-	require.NoError(t, json.Unmarshal([]byte(p.category("empty")["description"].(string)), &empty))
-	assert.Equal(t, map[string]any{"translations": map[string]any{"fr": "empty", "en": "empty en"}}, empty)
-	require.NoError(t, json.Unmarshal([]byte(p.category("json")["description"].(string)), &js))
-	assert.Equal(t, "jsonnl", js["translations"].(map[string]any)["nl"], "the translations of other languages stay")
-	assert.Equal(t, "json en", js["translations"].(map[string]any)["en"])
-	assert.EqualValues(t, 1, js["other"], "and so do the other keys")
+	assert.Equal(t, []any{"menu", "name:en:empty en"}, p.category("empty")["tags"], "other tags stay, the names are replaced")
+	assert.NotContains(t, p.category("empty"), "description")
+	assert.NotContains(t, p.category("json"), "description", "the old convention leaves")
+	assert.Equal(t, []any{"name:en:json en"}, p.category("json")["tags"])
 	assert.Equal(t, "{not json", p.category("broken")["description"])
 	assert.Equal(t, "Our best sushi", p.category("plain")["description"])
-	assert.Equal(t, []string{"broken", "plain"}, p.warned(domain.WarnCategoryDescriptionKept))
+	assert.Equal(t, []any{"name:en:plain en"}, p.category("plain")["tags"])
+
+	onlyFrench := &domain.LocalSnapshot{
+		Categories: []domain.LocalCategory{{ID: puid(1), Slug: "empty", Order: 1, Names: ptexts("empty", "")}},
+		Products:   local.Products,
+	}
+	p = planWith(t, application.PublishInput{Local: onlyFrench, Links: links[:1], Settings: application.PublishSettings{Language: "fr"},
+		Base: json.RawMessage(`{"categories":[{"ref":"empty","name":"empty","tags":["name:en:old"]}]}`)})
+	assert.Empty(t, p.category("empty")["tags"], "no tag is left when nothing is translated")
+}
+
+// markupWorld is a shop with one visible product, one hidden one and a paid and a free option.
+func markupWorld() (*domain.LocalSnapshot, []domain.PlatformPrice) {
+	local := &domain.LocalSnapshot{
+		Categories: []domain.LocalCategory{{ID: puid(1), Slug: "c", Order: 1, Names: ptexts("C", "")}},
+		Products: []domain.LocalProduct{
+			{ID: puid(10), CategoryID: puid(1), Code: "A", Price: pdec("8.90"), VatCategory: "food", Visible: true, Texts: ptexts("A", "")},
+			{ID: puid(11), CategoryID: puid(1), Code: "B", Price: pdec("5.00"), VatCategory: "food", Visible: false, Texts: ptexts("B", "")},
+		},
+		Groups: []domain.LocalGroup{{ID: puid(20), ProductID: puid(10), Min: 0, Max: 1, Sort: 1, Names: ptexts("Sauce", "")}},
+		Choices: []domain.LocalChoice{
+			{ID: puid(30), ProductID: puid(10), GroupID: puid(20), PriceModifier: pdec("1.00"), Sort: 1, Names: ptexts("Paid", "")},
+			{ID: puid(31), ProductID: puid(10), GroupID: puid(20), PriceModifier: pdec("0"), Sort: 2, Names: ptexts("Free", "")},
+		},
+	}
+	return local, []domain.PlatformPrice{
+		{VariantRef: "uber", Name: "Uber Eats", MarkupPercent: pdec("30"), RoundToCents: 10},
+		{VariantRef: "deliveroo", Name: "Deliveroo", MarkupPercent: pdec("25"), RoundToCents: 0},
+	}
+}
+
+// Each platform reads its own variant: the base prices stay the shop's, every SKU and option gets
+// its marked up price, and republishing replaces the rule instead of piling up.
+func TestPlatformPricesAreWrittenNextToTheBasePrices(t *testing.T) {
+	local, prices := markupWorld()
+	settings := application.PublishSettings{Language: "fr", PlatformPrices: prices}
+	p := planWith(t, application.PublishInput{Local: local, Settings: settings, Base: json.RawMessage(`{}`)})
+
+	sku := p.sku("A")
+	assert.Equal(t, "8.90 EUR", sku["price"])
+	want := []any{
+		map[string]any{"variant_refs": []any{"uber"}, "price": "11.60 EUR"},
+		map[string]any{"variant_refs": []any{"deliveroo"}, "price": "11.13 EUR"},
+	}
+	assert.Equal(t, want, sku["price_overrides"], "30% of 8.90 rounded up to 10 cents; 25% to the cent")
+	assert.ElementsMatch(t, []any{
+		map[string]any{"ref": "uber", "name": "Uber Eats"},
+		map[string]any{"ref": "deliveroo", "name": "Deliveroo"},
+		map[string]any{"ref": "pili-hidden", "name": "Masqué"},
+	}, p.data["variants"])
+
+	var paid, free map[string]any
+	for _, l := range asList(p.data["option_lists"]) {
+		for _, o := range asList(l["options"]) {
+			switch o["name"] {
+			case "Paid":
+				paid = o
+			case "Free":
+				free = o
+			}
+		}
+	}
+	require.NotNil(t, paid)
+	require.NotNil(t, free)
+	assert.Equal(t, "1.00 EUR", paid["price"])
+	assert.Equal(t, map[string]any{"variant_refs": []any{"uber"}, "price": "1.30 EUR"}, asList(paid["price_overrides"])[0])
+	assert.Equal(t, map[string]any{"variant_refs": []any{"uber"}, "price": "0.00 EUR"}, asList(free["price_overrides"])[0])
+
+	// A new markup replaces the rule and keeps a rule somebody else set.
+	base := `{"products":[{"ref":"A","name":"A","skus":[{"ref":"A","price":"8.90 EUR","price_overrides":[
+	  {"variant_refs":["uber"],"price":"1.00 EUR"},{"variant_refs":["staff"],"price":"2.00 EUR"}]}]}]}`
+	link := linkOf(domain.EntityProduct, puid(10), "A", "A")
+	merged := planWith(t, application.PublishInput{Local: local, Links: []domain.CatalogLink{link}, Settings: settings, Base: json.RawMessage(base)})
+	assert.Equal(t, []any{
+		map[string]any{"variant_refs": []any{"staff"}, "price": "2.00 EUR"},
+		want[0], want[1],
+	}, merged.sku("A")["price_overrides"])
+}
+
+func TestWithoutPlatformPricesNothingIsWritten(t *testing.T) {
+	local, _ := markupWorld()
+	p := planWith(t, application.PublishInput{Local: local, Settings: application.PublishSettings{Language: "fr"}, Base: json.RawMessage(`{}`)})
+	assert.NotContains(t, p.sku("A"), "price_overrides")
+	assert.NotContains(t, p.data, "variants")
+}
+
+// A markup that changes must republish, though no menu item did.
+func TestAChangedMarkupChangesTheMenuHash(t *testing.T) {
+	local, prices := markupWorld()
+	before := application.LocalMenuHash(local, application.PublishSettings{Language: "fr", PlatformPrices: prices})
+	prices[0].MarkupPercent = pdec("35")
+	assert.NotEqual(t, before, application.LocalMenuHash(local, application.PublishSettings{Language: "fr", PlatformPrices: prices}))
+}
+
+// The bridges ignore tags: a hidden product leaves the platforms by its restriction, and comes back
+// with every other restriction it had.
+func TestAHiddenProductLeavesThePlatformsPriceLists(t *testing.T) {
+	local, prices := markupWorld()
+	settings := application.PublishSettings{Language: "fr", PlatformPrices: prices}
+	p := planWith(t, application.PublishInput{Local: local, Settings: settings, Base: json.RawMessage(`{}`)})
+	assert.Equal(t, map[string]any{"variant_refs": []any{"pili-hidden"}}, p.sku("B")["restrictions"])
+	assert.Contains(t, p.sku("B")["tags"], "web:hidden", "the shop and the POS read the tag")
+	assert.NotContains(t, p.sku("A"), "restrictions")
+	assert.Empty(t, p.warned(domain.WarnHiddenOnPlatforms))
+
+	local.Products[1].Visible = true
+	back := planWith(t, application.PublishInput{Local: local, Links: []domain.CatalogLink{linkOf(domain.EntityProduct, puid(11), "B", "B")}, Settings: settings, Base: p.Data})
+	assert.NotContains(t, back.sku("B"), "restrictions")
+
+	base := `{"products":[{"ref":"B","name":"B","skus":[{"ref":"B","price":"5.00 EUR",
+	  "restrictions":{"variant_refs":["pili-hidden"],"dow":"12345"}}]}]}`
+	kept := planWith(t, application.PublishInput{Local: local, Links: []domain.CatalogLink{linkOf(domain.EntityProduct, puid(11), "B", "B")}, Settings: settings, Base: json.RawMessage(base)})
+	assert.Equal(t, map[string]any{"dow": "12345"}, kept.sku("B")["restrictions"])
+
+	other := `{"products":[{"ref":"B","name":"B","skus":[{"ref":"B","price":"5.00 EUR","restrictions":{"variant_refs":["staff"]}}]}]}`
+	mine := planWith(t, application.PublishInput{Local: local, Links: []domain.CatalogLink{linkOf(domain.EntityProduct, puid(11), "B", "B")}, Settings: settings, Base: json.RawMessage(other)})
+	assert.Equal(t, map[string]any{"variant_refs": []any{"staff"}}, mine.sku("B")["restrictions"], "somebody else's restriction stays")
+}
+
+func TestAHiddenProductWithoutPriceListsIsReported(t *testing.T) {
+	local, _ := markupWorld()
+	p := planWith(t, application.PublishInput{Local: local, Settings: application.PublishSettings{Language: "fr"}, Base: json.RawMessage(`{}`)})
+	assert.Equal(t, []string{"B"}, p.warned(domain.WarnHiddenOnPlatforms))
+	assert.NotContains(t, p.sku("B"), "restrictions")
 }
 
 // Categories and option lists the shop published and no longer has leave the catalog, unless

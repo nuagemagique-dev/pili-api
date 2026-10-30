@@ -10,6 +10,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
@@ -255,4 +257,39 @@ func TestInvalidSettingErrorNamesTheField(t *testing.T) {
 	if !errors.As(fmt.Errorf("wrapped: %w", err), &target) || target.Field != "catalogLanguage" {
 		t.Fatal("the error is found through wrapping")
 	}
+}
+
+func TestAPlatformPriceIsMarkedUpAndRoundedUp(t *testing.T) {
+	price := func(percent string, round int64) domain.PlatformPrice {
+		return domain.PlatformPrice{MarkupPercent: decimal.RequireFromString(percent), RoundToCents: round}
+	}
+	for _, c := range []struct {
+		in, percent string
+		round       int64
+		want        string
+	}{
+		{"8.90", "30", 10, "11.60"},
+		{"8.90", "25", 0, "11.13"},
+		{"8.90", "25", 1, "11.13"},
+		{"10.00", "0", 50, "10.00"},
+		{"10.01", "0", 50, "10.50"},
+		{"0", "30", 10, "0.00"},
+	} {
+		got := price(c.percent, c.round).Apply(decimal.RequireFromString(c.in))
+		assert.Equal(t, c.want, got.StringFixed(2), "%s +%s%% to %d", c.in, c.percent, c.round)
+	}
+}
+
+func TestPlatformPricesAsAColumn(t *testing.T) {
+	var p domain.PlatformPrices
+	assert.Equal(t, "[]", p.JSON())
+	want := `[{"variantRef":"uber","name":"Uber","markupPercent":"30","roundToCents":10}]`
+	require.NoError(t, p.Scan([]byte(want)))
+	require.Len(t, p, 1)
+	assert.JSONEq(t, want, p.JSON())
+	require.NoError(t, p.Scan(`[]`))
+	assert.Empty(t, p)
+	require.NoError(t, p.Scan(nil))
+	assert.Nil(t, p)
+	assert.Error(t, p.Scan(12))
 }

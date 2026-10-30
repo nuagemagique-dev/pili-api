@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"maps"
 	"slices"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -68,6 +69,7 @@ func (p *pubPlanner) assemble() jobj {
 	p.mergeProducts(out)
 	p.dropUnreferenced(out)
 	p.mergeCategories(out)
+	p.mergeVariants(out)
 	return out.data()
 }
 
@@ -125,10 +127,86 @@ func (p *pubPlanner) mergeList(src jobj, dl *dList) jobj {
 		o["ref"] = c.ref
 		o["name"] = c.name
 		o["price"] = money(c.price)
+		p.writePlatformPrices(o, c.price)
 		desired = append(desired, o)
 	}
 	l["options"] = objsToAny(placeOwned(jobjs(l, "options"), refOf, desired, p.removedOpts[dl.ref]))
 	return l
+}
+
+// ---- the price lists of the platforms ----
+
+// hiddenVariantRef is the variant no platform reads. The bridges ignore tags, so a hidden SKU is
+// restricted to it to leave the menus of the platforms; the shop and the POS read the tag.
+const hiddenVariantRef = "pili-hidden"
+
+// mergeVariants makes sure the variants the prices and restrictions name exist.
+func (p *pubPlanner) mergeVariants(out *baseCatalog) {
+	if len(p.in.Settings.PlatformPrices) == 0 {
+		return
+	}
+	byRef := map[string]jobj{}
+	for _, v := range out.variants {
+		byRef[refOf(v)] = v
+	}
+	put := func(ref, name string) {
+		if v := byRef[ref]; v != nil {
+			v["name"] = name
+			return
+		}
+		out.variants = append(out.variants, jobj{"ref": ref, "name": name})
+	}
+	for _, e := range p.in.Settings.PlatformPrices {
+		put(e.VariantRef, e.Name)
+	}
+	put(hiddenVariantRef, "Masqué")
+}
+
+// writePlatformPrices replaces the price rule of each platform on a SKU or an option. Every other
+// rule is carried over.
+func (p *pubPlanner) writePlatformPrices(o jobj, price decimal.Decimal) {
+	platforms := p.in.Settings.PlatformPrices
+	if len(platforms) == 0 {
+		return
+	}
+	var kept []jobj
+	for _, rule := range jobjs(o, "price_overrides") {
+		refs := jstrs(rule, "variant_refs")
+		ours := len(refs) == 1 && slices.ContainsFunc(platforms, func(e domain.PlatformPrice) bool { return e.VariantRef == refs[0] })
+		if !ours {
+			kept = append(kept, rule)
+		}
+	}
+	for _, e := range platforms {
+		kept = append(kept, jobj{"variant_refs": []any{e.VariantRef}, "price": money(e.Apply(price))})
+	}
+	o["price_overrides"] = objsToAny(kept)
+}
+
+// mergeHiddenRestriction takes a hidden SKU out of the platforms' price lists and puts it back when
+// it is visible again. Without a price list the bridges push every SKU, so a hidden one stays
+// orderable on a platform: the plan says so.
+func (p *pubPlanner) mergeHiddenRestriction(s jobj, d *dProduct) {
+	r, _ := s["restrictions"].(jobj)
+	if !d.local.Visible {
+		if len(p.in.Settings.PlatformPrices) == 0 {
+			p.warn(domain.WarnHiddenOnPlatforms, d.sku, "the hidden product "+d.sku+" stays orderable on the platforms until they read a platform price list")
+			return
+		}
+		if r == nil {
+			r = jobj{}
+		}
+		r["variant_refs"] = []any{hiddenVariantRef}
+		s["restrictions"] = r
+		return
+	}
+	if r == nil || !slices.Equal(jstrs(r, "variant_refs"), []string{hiddenVariantRef}) {
+		return
+	}
+	delete(r, "variant_refs")
+	if len(r) == 0 {
+		delete(s, "restrictions")
+	}
 }
 
 // ---- products and SKUs ----
@@ -355,6 +433,7 @@ func (p *pubPlanner) mergeSku(src jobj, d *dProduct, multi bool, productName str
 	} else {
 		s["price"] = price
 	}
+	p.writePlatformPrices(s, d.local.Price)
 	if multi {
 		name, ok := splitName(productName, d.name)
 		if !ok {
@@ -373,6 +452,7 @@ func (p *pubPlanner) mergeSku(src jobj, d *dProduct, multi bool, productName str
 	} else {
 		addTag(s, "web:hidden")
 	}
+	p.mergeHiddenRestriction(s, d)
 
 	cf, _ := s["custom_fields"].(jobj)
 	if cf == nil {
@@ -559,46 +639,41 @@ func (p *pubPlanner) mergeCategories(out *baseCatalog) {
 		c := cloneObj(baseByRef[d.ref])
 		c["ref"] = d.ref
 		c["name"] = d.name
-		p.mergeCategoryDescription(c, d)
+		p.mergeCategoryNames(c, d)
 		desired = append(desired, c)
 	}
 	out.categories = placeOwned(out.categories, refOf, desired, p.removeCat)
 }
 
-// mergeCategoryDescription keeps the translations of the category name in the description, using the
-// JSON convention the importer reads. A plain text description is never replaced.
-func (p *pubPlanner) mergeCategoryDescription(c jobj, d *dCategory) {
-	extra := false
+// categoryNameTagPrefix starts the tags that carry a category's name in another language:
+// name:zh:寿司. HubRise categories have no custom fields, and their description reaches the customers
+// on the platforms.
+const categoryNameTagPrefix = "name:"
+
+// mergeCategoryNames writes the names of the other languages as tags, and removes what earlier
+// versions left in the description for the same purpose. A description of the restaurant stays.
+func (p *pubPlanner) mergeCategoryNames(c jobj, d *dCategory) {
+	tags := []any{}
+	for _, t := range jstrs(c, "tags") {
+		if !strings.HasPrefix(t, categoryNameTagPrefix) {
+			tags = append(tags, t)
+		}
+	}
+	langs := make([]string, 0, len(d.names))
 	for lang := range d.names {
 		if lang != p.lang {
-			extra = true
+			langs = append(langs, lang)
 		}
 	}
-	if !extra {
-		return
+	sort.Strings(langs)
+	for _, lang := range langs {
+		tags = append(tags, categoryNameTagPrefix+lang+":"+d.names[lang])
 	}
-	raw := strings.TrimSpace(jstr(c, "description"))
-	payload := jobj{}
-	switch {
-	case raw == "":
-	case strings.HasPrefix(raw, "{"):
-		parsed, err := decodeObject([]byte(raw))
-		if err != nil {
-			p.warn(domain.WarnCategoryDescriptionKept, d.ref, "the description of the category "+d.ref+" is not readable, it is kept")
-			return
-		}
-		payload = parsed
-	default:
-		p.warn(domain.WarnCategoryDescriptionKept, d.ref, "the category "+d.ref+" has a plain text description, it is kept and the translations of its name are not written")
-		return
+	// HubRise answers with an empty list: writing none where there was one is no change.
+	if _, had := c["tags"]; had || len(tags) > 0 {
+		c["tags"] = tags
 	}
-	tr, _ := payload["translations"].(jobj)
-	if tr == nil {
-		tr = jobj{}
+	if payload, err := decodeObject([]byte(strings.TrimSpace(jstr(c, "description")))); err == nil && payload[categoryTranslationsKey] != nil {
+		delete(c, "description")
 	}
-	for lang, name := range d.names {
-		tr[lang] = name
-	}
-	payload["translations"] = tr
-	c["description"] = string(marshalJSON(payload))
 }
