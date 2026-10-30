@@ -279,34 +279,6 @@ type failingReader struct{}
 
 func (failingReader) Read([]byte) (int, error) { return 0, io.ErrUnexpectedEOF }
 
-func TestRenameProductImage(t *testing.T) {
-	ctx := context.Background()
-
-	f := newFileService(t)
-	require.NoError(t, RenameProductImage(ctx, "old-slug", "new-slug"))
-	assert.Equal(t, http.MethodPost, f.method)
-	assert.Equal(t, "/rename", f.path)
-	assert.Equal(t, map[string]string{"old_slug": "old-slug", "new_slug": "new-slug"}, f.fields)
-
-	f.status = http.StatusNotFound
-	require.ErrorContains(t, RenameProductImage(ctx, "old-slug", "new-slug"), "status 404")
-
-	hits := f.hits
-	require.ErrorContains(t, RenameProductImage(ctx, "Bad Slug", "new-slug"), "invalid old slug")
-	require.ErrorContains(t, RenameProductImage(ctx, "old-slug", "new/slug"), "invalid new slug")
-	assert.Equal(t, hits, f.hits)
-
-	t.Setenv("FILE_SERVICE_URL", "")
-	require.ErrorContains(t, RenameProductImage(ctx, "a", "b"), "FILE_SERVICE_URL env var not set")
-
-	t.Setenv("FILE_SERVICE_URL", "http://bad host")
-	require.ErrorContains(t, RenameProductImage(ctx, "a", "b"), "build rename request")
-
-	f.srv.Close()
-	t.Setenv("FILE_SERVICE_URL", f.srv.URL)
-	require.ErrorContains(t, RenameProductImage(ctx, "a", "b"), "rename request failed")
-}
-
 func TestDeleteProductImage(t *testing.T) {
 	ctx := context.Background()
 

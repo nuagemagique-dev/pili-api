@@ -63,6 +63,14 @@ func isActiveCouponOrderConflict(err error) bool {
 		pqErr.Constraint == "one_active_coupon_order_per_user"
 }
 
+// isIdempotencyKeyConflict reports whether err is the unique violation of two orders of one
+// customer carrying the same checkout key.
+func isIdempotencyKeyConflict(err error) bool {
+	var pqErr *pq.Error
+	return errors.As(err, &pqErr) && pqErr.Code == "23505" &&
+		pqErr.Constraint == "orders_user_idempotency_key"
+}
+
 // Map applies fn to every element of in, returning a new slice.
 func Map[T any, U any](in []T, fn func(T) U) []U {
 	out := make([]U, len(in))

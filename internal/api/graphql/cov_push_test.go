@@ -331,7 +331,7 @@ func TestUpdateMyOrdersLanguage(t *testing.T) {
 }
 
 func TestSendNewOrderPush(t *testing.T) {
-	env := setupCovEnv(t, covOptions{Push: true, PosTokens: []string{"pos-1", "refused-pos"}})
+	env := setupCovEnv(t, covOptions{Push: true, PosTokens: []string{"pos-1", "refused-pos"}, PosFids: []string{"pos-fid-1"}})
 	logs := captureLogs(t)
 	admin := env.Fixtures.AdminUser.ID
 	for tok, platform := range map[string]string{
@@ -367,7 +367,8 @@ func TestSendNewOrderPush(t *testing.T) {
 
 		require.Eventually(t, func() bool {
 			return len(env.APNs.PushesTo("adm-ios")) == 1 && len(env.FCM.PushesTo("adm-android")) == 1 &&
-				len(env.FCM.PushesTo("pos-1")) == 1 && len(env.FCM.PushesTo("refused-pos")) == 1
+				len(env.FCM.PushesTo("pos-1")) == 1 && len(env.FCM.PushesTo("refused-pos")) == 1 &&
+				len(env.FCM.PushesTo("pos-fid-1")) == 1
 		}, 20*time.Second, 20*time.Millisecond)
 
 		aps, _ := env.APNs.PushesTo("adm-ios")[0].Payload["aps"].(map[string]any)
@@ -379,6 +380,8 @@ func TestSendNewOrderPush(t *testing.T) {
 		msg, _ := env.FCM.PushesTo("pos-1")[0].Payload["notification"].(map[string]any)
 		assert.Equal(t, "New order", msg["title"])
 		assert.Equal(t, "Awaiting confirmation", msg["body"])
+		assert.Equal(t, "pos-fid-1", env.FCM.PushesTo("pos-fid-1")[0].Payload["fid"], "a direct-send handheld is addressed by its installation ID")
+		assert.NotContains(t, env.FCM.PushesTo("pos-fid-1")[0].Payload, "token")
 		assert.Empty(t, env.FCM.PushesTo("cust-android"), "a customer's device is not an admin device")
 
 		// Tokens the providers report as dead are removed; ones refused for another reason stay.
@@ -406,6 +409,15 @@ func TestSendNewOrderPush(t *testing.T) {
 		t.Cleanup(func() { env.Pos.err = nil })
 		env.Resolver.SendNewOrderPush(newOrder("fr"))
 		waitLog(t, logs, "failed to fetch POS FCM tokens")
+	})
+
+	t.Run("a failing installation ID lookup is logged and the tokens are still pushed", func(t *testing.T) {
+		env.Pos.fidErr = errBoom
+		t.Cleanup(func() { env.Pos.fidErr = nil })
+		before := len(env.FCM.PushesTo("pos-1"))
+		env.Resolver.SendNewOrderPush(newOrder("fr"))
+		require.Eventually(t, func() bool { return len(env.FCM.PushesTo("pos-1")) == before+1 }, 20*time.Second, 20*time.Millisecond)
+		waitLog(t, logs, "failed to fetch POS FCM installation IDs")
 	})
 
 	t.Run("with APNs only, android admin devices are skipped", func(t *testing.T) {

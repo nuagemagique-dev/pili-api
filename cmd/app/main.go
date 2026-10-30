@@ -423,8 +423,9 @@ func main() {
 		MFAConfirmTOTP: auth.ConfirmTOTPHandler,
 		MFARemoveTOTP:  auth.RemoveTOTPHandler,
 
-		POSDeviceLogin:    posHandler.DeviceLogin,
-		POSUpdateFCMToken: posHandler.UpdateFCMToken,
+		POSDeviceLogin:           posHandler.DeviceLogin,
+		POSUpdateFCMToken:        posHandler.UpdateFCMToken,
+		POSUpdateFCMInstallation: posHandler.UpdateFCMInstallation,
 
 		PaymentWebhook: paymentHandler.UpdatePaymentStatusHandler,
 		ImagePreview:   images.PreviewHandler,
@@ -440,12 +441,15 @@ func main() {
 	// Use ReadHeaderTimeout instead of ReadTimeout, and omit WriteTimeout,
 	// because both set deadlines on the underlying net.Conn that persist after
 	// WebSocket hijack: killing long-lived subscription connections.
+	// IdleTimeout must stay above Traefik's idle timeout to its backends (90s by
+	// default), so the proxy drops idle connections first. Otherwise it can reuse
+	// one just as we close it and answer 502, without retrying a POST.
 	port := cmp.Or(os.Getenv("PORT"), "8080")
 	srv := &http.Server{
 		Addr:              ":" + port,
 		Handler:           router,
 		ReadHeaderTimeout: 15 * time.Second,
-		IdleTimeout:       60 * time.Second,
+		IdleTimeout:       120 * time.Second,
 	}
 
 	// Graceful shutdown

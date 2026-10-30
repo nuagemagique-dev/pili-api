@@ -17,7 +17,7 @@ import (
 // Request is one send received by the fake.
 type Request struct {
 	Path    string
-	Token   string         // message.token
+	Token   string         // message.token, or message.fid for a send to an installation ID
 	Payload map[string]any // the whole "message" object
 }
 
@@ -48,7 +48,7 @@ func New(t *testing.T, status int, body string) *Server {
 	return NewFunc(t, func(Request) Response { return Response{Status: status, Body: body} })
 }
 
-// ByToken answers by registration token: "dead-" is UNREGISTERED (404), "refused-" a permission
+// ByToken answers by registration token (or installation ID): "dead-" is UNREGISTERED (404), "refused-" a permission
 // failure (403), anything else a success.
 func ByToken(t *testing.T) *Server {
 	t.Helper()
@@ -74,6 +74,9 @@ func NewFunc(t *testing.T, respond func(Request) Response) *Server {
 		}
 		_ = json.Unmarshal(raw, &body)
 		token, _ := body.Message["token"].(string)
+		if fid, ok := body.Message["fid"].(string); ok {
+			token = fid
+		}
 		req := Request{Path: r.URL.Path, Token: token, Payload: body.Message}
 		s.mu.Lock()
 		s.reqs = append(s.reqs, req)
@@ -95,7 +98,7 @@ func (s *Server) Requests() []Request {
 	return append([]Request(nil), s.reqs...)
 }
 
-// PushesTo lists the sends to a registration token.
+// PushesTo lists the sends to a registration token (or installation ID).
 func (s *Server) PushesTo(token string) []Request {
 	var out []Request
 	for _, r := range s.Requests() {

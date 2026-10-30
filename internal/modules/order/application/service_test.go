@@ -35,6 +35,10 @@ func (f *fakeOrderRepo) FindByID(_ context.Context, _ uuid.UUID) (*domain.Order,
 	return &cp, nil, nil
 }
 
+func (f *fakeOrderRepo) FindByIdempotencyKey(_ context.Context, _ uuid.UUID, _ string) (*domain.Order, error) {
+	return f.order, nil
+}
+
 func (f *fakeOrderRepo) FindPaginated(_ context.Context, _ int, _ int, _ *uuid.UUID) ([]*domain.Order, error) {
 	return nil, nil
 }

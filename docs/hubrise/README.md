@@ -324,5 +324,5 @@ preview, which shows what the HubRise catalog would change in the shop. Switchin
 for a new preview and confirmation.
 
 **Configuration.** No new secret. `HUBRISE_IMAGE_BASE_URL` is optional (images only). The permission
-`catalog.write` is requested at connection time. The migration `20261024190000_add_catalog_publish.sql`
+`catalog.write` is requested at connection time. The migration `20261029190000_add_catalog_publish.sql`
 is additive.

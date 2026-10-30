@@ -113,6 +113,8 @@ const (
 const (
 	// CodeCashAmountInvalid: the "I will pay with" cash amount is not a non-negative number.
 	CodeCashAmountInvalid Code = "CASH_AMOUNT_INVALID"
+	// CodeIdempotencyKeyInvalid: the checkout key is not 8 to 64 letters, digits, '-' or '_'.
+	CodeIdempotencyKeyInvalid Code = "IDEMPOTENCY_KEY_INVALID"
 	// CodeOrderCreateFailed: server fault while saving the order.
 	CodeOrderCreateFailed Code = "ORDER_CREATE_FAILED"
 	// CodePaymentFailed: the payment provider refused / failed to create the payment; the order was removed.

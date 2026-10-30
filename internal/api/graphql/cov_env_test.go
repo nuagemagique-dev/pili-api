@@ -169,7 +169,9 @@ func (a *fakeAgent) RemoveAccount(context.Context, string) (assistantDomain.Conn
 type fakePosDevices struct {
 	posDomain.DeviceRepository
 	tokens []string
+	fids   []string
 	err    error
+	fidErr error
 }
 
 // FindByID answers any device id as an enrolled one.
@@ -181,6 +183,10 @@ func (f *fakePosDevices) FindActiveFCMTokens(context.Context) ([]string, error) 
 	return f.tokens, f.err
 }
 
+func (f *fakePosDevices) FindActiveFCMInstallationIDs(context.Context) ([]string, error) {
+	return f.fids, f.fidErr
+}
+
 // ---- the environment ---------------------------------------------------------------------------
 
 type covOptions struct {
@@ -190,6 +196,8 @@ type covOptions struct {
 	Agent *fakeAgent
 	// PosTokens are the FCM tokens of the active POS handhelds.
 	PosTokens []string
+	// PosFids are the Firebase Installation IDs of the POS handhelds on FCM direct send.
+	PosFids []string
 	// PosErr makes the POS token lookup fail.
 	PosErr error
 	// EnforceOrderingHours turns the opening-hours gate on.
@@ -223,7 +231,7 @@ func setupCovEnv(t *testing.T, opts covOptions) *covEnv {
 		Zitadel: &fakeZitadel{},
 		Google:  &fakeGoogle{},
 		Mail:    startFakeSMTP(t),
-		Pos:     &fakePosDevices{tokens: opts.PosTokens, err: opts.PosErr},
+		Pos:     &fakePosDevices{tokens: opts.PosTokens, fids: opts.PosFids, err: opts.PosErr},
 	}
 	e.Limiters.Coupon = middleware.NewRateLimiter(rate.Every(time.Hour), 3)
 	e.Limiters.Public = middleware.NewRateLimiter(rate.Every(time.Hour), 2)

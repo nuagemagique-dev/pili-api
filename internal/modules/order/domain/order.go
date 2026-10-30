@@ -87,6 +87,9 @@ type Order struct {
 	// Channel is where the order was placed from, "web" or "app". NULL (nil) on orders that
 	// predate the column, which readers treat as "web".
 	Channel *string `db:"channel" json:"channel,omitempty"`
+	// IdempotencyKey is the client's key for the checkout attempt that placed the order (see
+	// CreateOrderInput.idempotencyKey). Unique per customer.
+	IdempotencyKey *string `db:"idempotency_key" json:"-"`
 }
 
 type OrderStatusHistory struct {

@@ -31,6 +31,8 @@ type memDevices struct {
 	fcmErr    error
 	activeFCM []string
 	activeErr error
+	fid       map[uuid.UUID]string
+	activeFid []string
 }
 
 func (m *memDevices) FindByID(_ context.Context, id uuid.UUID) (*domain.Device, error) {
@@ -63,6 +65,18 @@ func (m *memDevices) FindActiveFCMTokens(context.Context) ([]string, error) {
 	return m.activeFCM, m.activeErr
 }
 
+func (m *memDevices) UpdateFCMInstallationID(_ context.Context, id uuid.UUID, fid string) error {
+	if m.fcmErr != nil {
+		return m.fcmErr
+	}
+	m.fid[id] = fid
+	return nil
+}
+
+func (m *memDevices) FindActiveFCMInstallationIDs(context.Context) ([]string, error) {
+	return m.activeFid, m.activeErr
+}
+
 var errNoRows = fmt.Errorf("pos device: %w", sql.ErrNoRows) // what the sqlx repository answers for an unknown id
 
 type deviceEnv struct {
@@ -79,6 +93,7 @@ func newDeviceEnv(t *testing.T) *deviceEnv {
 	repo := &memDevices{
 		devices: map[uuid.UUID]*domain.Device{id: {ID: id, DeviceSecretHash: hex.EncodeToString(sum[:])}},
 		fcm:     map[uuid.UUID]string{},
+		fid:     map[uuid.UUID]string{},
 	}
 	return &deviceEnv{svc: NewService(DefaultConfig(testSecret), repo), repo: repo, id: id, key: sum[:]}
 }
@@ -246,6 +261,67 @@ func TestUpdateDeviceFCMToken(t *testing.T) {
 		e.repo.fcmErr = boom
 		assert.ErrorIs(t, e.svc.UpdateDeviceFCMToken(t.Context(), e.fcmInput(now(), "t")), boom)
 	})
+}
+
+func (e *deviceEnv) fidInput(ts int64, fid string) FCMInstallationInput {
+	in := FCMInstallationInput{DeviceID: e.id, FID: fid, Timestamp: ts, Nonce: "n-1"}
+	in.HMAC = sign(e.key, fmt.Sprintf("%s|fid|%s|%d|%s", in.DeviceID, in.FID, in.Timestamp, in.Nonce))
+	return in
+}
+
+func TestUpdateDeviceFCMInstallationID(t *testing.T) {
+	now := func() int64 { return time.Now().UnixMilli() }
+
+	t.Run("stores the installation ID of an authenticated device", func(t *testing.T) {
+		e := newDeviceEnv(t)
+		require.NoError(t, e.svc.UpdateDeviceFCMInstallationID(t.Context(), e.fidInput(now(), "fid-abc")))
+		assert.Equal(t, "fid-abc", e.repo.fid[e.id])
+		assert.Empty(t, e.repo.fcm)
+	})
+
+	t.Run("the signature covers the ID, and a token signature is not an installation signature", func(t *testing.T) {
+		e := newDeviceEnv(t)
+		in := e.fidInput(now(), "fid-abc")
+		in.FID = "fid-attacker"
+		assert.ErrorIs(t, e.svc.UpdateDeviceFCMInstallationID(t.Context(), in), ErrInvalidHMAC)
+
+		tok := e.fcmInput(now(), "same-value")
+		replay := FCMInstallationInput{DeviceID: tok.DeviceID, FID: tok.FCMToken, Timestamp: tok.Timestamp, Nonce: tok.Nonce, HMAC: tok.HMAC}
+		assert.ErrorIs(t, e.svc.UpdateDeviceFCMInstallationID(t.Context(), replay), ErrInvalidHMAC)
+		assert.Empty(t, e.repo.fid)
+	})
+
+	t.Run("stale, revoked and unknown devices are refused", func(t *testing.T) {
+		e := newDeviceEnv(t)
+		assert.ErrorIs(t, e.svc.UpdateDeviceFCMInstallationID(t.Context(), e.fidInput(now()-int64(time.Hour/time.Millisecond), "f")), ErrStaleRequest)
+		in := e.fidInput(now(), "f")
+		in.DeviceID = uuid.New()
+		assert.ErrorIs(t, e.svc.UpdateDeviceFCMInstallationID(t.Context(), in), ErrDeviceNotEnrolled)
+		at := time.Now()
+		e.repo.devices[e.id].RevokedAt = &at
+		assert.ErrorIs(t, e.svc.UpdateDeviceFCMInstallationID(t.Context(), e.fidInput(now(), "f")), ErrDeviceRevoked)
+		assert.Empty(t, e.repo.fid)
+	})
+
+	t.Run("a storage failure is returned", func(t *testing.T) {
+		e := newDeviceEnv(t)
+		boom := errors.New("db down")
+		e.repo.fcmErr = boom
+		assert.ErrorIs(t, e.svc.UpdateDeviceFCMInstallationID(t.Context(), e.fidInput(now(), "f")), boom)
+	})
+}
+
+func TestGetActiveFCMInstallationIDs(t *testing.T) {
+	e := newDeviceEnv(t)
+	e.repo.activeFid = []string{"f1"}
+	got, err := e.svc.GetActiveFCMInstallationIDs(t.Context())
+	require.NoError(t, err)
+	assert.Equal(t, []string{"f1"}, got)
+
+	boom := errors.New("db down")
+	e.repo.activeErr = boom
+	_, err = e.svc.GetActiveFCMInstallationIDs(t.Context())
+	assert.ErrorIs(t, err, boom)
 }
 
 func TestGetActiveFCMTokens(t *testing.T) {

@@ -13,3 +13,8 @@ tsb-service
 *.db
 *.db-shm
 *.db-wal
+
+# Local tooling: git worktrees, Claude Code, editors, macOS
+.worktrees/
+.vscode/
+.DS_Store

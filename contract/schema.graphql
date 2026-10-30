@@ -129,6 +129,7 @@ input CreateOrderInput {
   couponCode: String
   cashPaymentAmount: String
   paymentRedirectUrl: String
+  idempotencyKey: String
 }
 input CreateOrderItemInput {
   productId: ID!

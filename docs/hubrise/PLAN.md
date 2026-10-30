@@ -122,19 +122,19 @@ Considered and **rejected** restructurings (and why):
 
 Migration order (task order = timestamp order):
 
-### M1 `20261024120000_create_hubrise_connection.sql` (T1)
+### M1 `20261029120000_create_hubrise_connection.sql` (T1)
 
 - `hubrise_connection`: `id BOOLEAN PRIMARY KEY DEFAULT TRUE CHECK (id)` (single row, same idiom as `restaurant_config`), `enabled BOOLEAN NOT NULL DEFAULT FALSE`, **`access_token_enc BYTEA NULL`** (AES-256-GCM, 1 version byte + 12 byte nonce + ciphertext; NULL = disconnected), `account_id, account_name, location_id, location_name, catalog_id, catalog_name, customer_list_id TEXT`, `scope TEXT`, feature toggles `push_orders, sync_status, sync_inventory, sync_catalog BOOLEAN NOT NULL DEFAULT FALSE` (all off, see A12), `auto_refund_on_cancel BOOLEAN NOT NULL DEFAULT FALSE`, `catalog_language TEXT NOT NULL DEFAULT 'fr'` (CHECK in fr,en,nl,zh), `variant_ref TEXT`, `channel_name TEXT`, `delivery_charge_ref, payment_fee_charge_ref TEXT`, `import_images BOOLEAN NOT NULL DEFAULT FALSE`, `catalog_hash TEXT`, `catalog_preview_hash TEXT`, `catalog_preview_at TIMESTAMPTZ` (a successful DRY_RUN; required before `sync_catalog` can be turned on, section 5.4), `push_orders_since TIMESTAMPTZ`, `inventory_baseline_at TIMESTAMPTZ` (section 8), `relink_required_at TIMESTAMPTZ` (section 5.5), `last_catalog_sync_at, last_event_at, auth_error_at TIMESTAMPTZ`, `last_error TEXT`, `callback_registered_at`, `created_at, updated_at`.
 - `hubrise_oauth_states (state TEXT PRIMARY KEY, admin_user_id UUID NOT NULL, created_at, expires_at)` for the OAuth `state` nonce (one-time, 10 min).
 - `hubrise_job_leases (name TEXT PRIMARY KEY, holder TEXT NOT NULL, leased_until TIMESTAMPTZ NOT NULL)`.
 - Backfill: none. Tables start empty; absence of a row = not connected = standalone. Down: drop the tables.
 
-### M2 `20261024130000_create_hubrise_catalog_links.sql` (T1)
+### M2 `20261029130000_create_hubrise_catalog_links.sql` (T1)
 
 `hubrise_catalog_links`: `id BIGSERIAL PK`, `entity_type TEXT CHECK in (category, product, choice_group, choice)`, four nullable FK columns `category_id -> product_categories`, `product_id -> products`, `choice_group_id -> product_choice_groups`, `choice_id -> product_choices`, **all `ON DELETE CASCADE`** (deleting a choice in the dashboard cleans its link), a CHECK that exactly the column matching `entity_type` is non-null, `hubrise_key TEXT NOT NULL` (category: ref; product: SKU ref; group: `skuRef|listRef`; choice: `skuRef|listRef|optionRef`), `hubrise_ref TEXT NOT NULL` (last segment; the option ref is what inventory entries name), `hubrise_id TEXT`, `content_hash TEXT NOT NULL DEFAULT ''`, `origin TEXT CHECK in (import, adopted, manual)`, `stock NUMERIC(12,3)`, **`inventory_sold_out BOOLEAN NOT NULL DEFAULT FALSE`** (true only while this link's unavailability was caused by HubRise inventory; the provenance marker of section 8), `sold_out_until TIMESTAMPTZ`, **`catalog_disabled BOOLEAN NOT NULL DEFAULT FALSE`** (HubRise restrictions say disabled; effective availability of a managed row = `NOT catalog_disabled AND NOT inventory_sold_out`), `inventory_synced_at`, `image_md5 TEXT`, `retired_at TIMESTAMPTZ`, timestamps. Partial unique indexes per FK column (one link per local row) and `UNIQUE (entity_type, hubrise_key)`; index on `(entity_type, hubrise_ref)` for inventory lookups.
 Backfill: none (no links until the owner runs adoption). Down: drop table.
 
-### M3 `20261024140000_create_hubrise_orders_outbox_events.sql` (T1; was M6 in the first draft)
+### M3 `20261029140000_create_hubrise_orders_outbox_events.sql` (T1; was M6 in the first draft)
 
 - `hubrise_orders`: `order_id UUID PRIMARY KEY REFERENCES orders ON DELETE CASCADE`, `hubrise_order_id TEXT` (unique where not null), `push_state TEXT CHECK in (pending, sent, parked, skipped)`, `pushed_at`, `last_remote_status TEXT`, `last_remote_event_at TIMESTAMPTZ` (set ONLY from remote event or remote GET data), `last_local_patch_at TIMESTAMPTZ` (set when we send a status PATCH), `remote_total NUMERIC(10,2)`, `needs_attention TEXT`, timestamps. This table is also the idempotency anchor for `order_create`: enqueue is `INSERT INTO hubrise_orders ... ON CONFLICT (order_id) DO NOTHING` and the outbox row is inserted in the same transaction only when the insert happened.
 - `hubrise_outbox`: `id BIGSERIAL PK`, `kind TEXT CHECK in (order_create, order_status, inventory)`, `order_id UUID REFERENCES orders ON DELETE CASCADE NULL`, `dedupe_key TEXT`, `payload JSONB NOT NULL DEFAULT '{}'`, `state TEXT CHECK in (pending, sending, sent, parked, skipped) DEFAULT pending`, `attempts INT NOT NULL DEFAULT 0` (number of claims), `leased_until TIMESTAMPTZ`, `next_attempt_at TIMESTAMPTZ DEFAULT now()`, `last_error TEXT`, `created_at, sent_at, parked_at`. Partial unique index `(dedupe_key) WHERE state = 'pending' AND kind = 'inventory'` (inventory rows collapse to the latest pending state; a row already `sending` is excluded, so a newer toggle creates a fresh row and is never lost). `order_status` rows are NOT deduplicated (section 7.1). Index `(state, next_attempt_at)`, index `(order_id, id)`.
@@ -142,7 +142,7 @@ Backfill: none (no links until the owner runs adoption). Down: drop table.
 - `hubrise_foreign_orders (hubrise_order_id TEXT PRIMARY KEY, seen_at TIMESTAMPTZ)`: cache of HubRise orders known not to be ours (placed by other channels), purged after 7 days, so the processor never re-fetches them.
 - Backfill: none. Down: drop the tables.
 
-### M4 `20261024150000_add_translation_source.sql` (T4)
+### M4 `20261029150000_add_translation_source.sql` (T4)
 
 `source TEXT NOT NULL DEFAULT 'manual'` on `product_translations`, `product_category_translations`, `product_choice_translations`, `product_choice_group_translations`. No CHECK (validated in Go: `manual` | `hubrise`). Each of the four ALTERs sits behind `SET LOCAL lock_timeout`.
 Backfill: the default **is** the backfill: every existing row is correctly `manual` (nothing ever came from HubRise). Down: drop the columns (loses provenance only).
@@ -150,15 +150,15 @@ Code change that goes with it: the dashboard's translation upsert must keep `sou
 `ON CONFLICT ... DO UPDATE SET name = EXCLUDED.name, description = EXCLUDED.description, source = CASE WHEN (t.name, t.description) IS DISTINCT FROM (EXCLUDED.name, EXCLUDED.description) THEN 'manual' ELSE t.source END`.
 The dashboard sends all languages on every product save; without the `IS DISTINCT FROM` rule a price edit would turn every HubRise name into a manual override.
 
-### M5 `20261024160000_add_choice_is_available.sql` (T7, with the choice side of the inventory)
+### M5 `20261029160000_add_choice_is_available.sql` (T7, with the choice side of the inventory)
 
 `product_choices.is_available BOOLEAN NOT NULL DEFAULT TRUE`. Backfill: default. Down: drop column. Needed because HubRise inventory can sell out an *option* (egg, extra sauce), and choices had no availability.
 
-### M6 `20261024170000_add_orders_channel.sql` (T5)
+### M6 `20261029170000_add_orders_channel.sql` (T5)
 
 `orders.channel TEXT NULL`, no CHECK. Set at creation from the existing `couponChannel(ctx)` (verified: it returns `web` or `app`, `app` when the access token belongs to the native client). Backfill: none; `NULL` is read as `web`. **Scan safety (historical, now enforced by A10):** `OrderRepository` used to read orders with `SELECT *` / `SELECT o.*` into `domain.Order` through sqlx, which fails on a column without a destination field; every such query now lists its columns (`db.Columns`) and `pkg/db` has a guard test that fails on `SELECT *` in production code. A NULL still cannot scan into a plain `string`. So `domain.Order` gets `Channel *string` (tag `db:"channel"`), every `SELECT` into `domain.Order` is audited, and a test reads rows that existed before the migration (NULL channel) through every order read path. Used as the HubRise `channel` fallback (EPOS side such as moyun-pos maps channels to payment types) and for reporting. Down: drop column.
 
-### M7 `20261024180000_create_hubrise_customers.sql` (T7B)
+### M7 `20261029180000_create_hubrise_customers.sql` (T7B)
 
 `hubrise_customers (user_id PK -> users ON DELETE CASCADE, hubrise_customer_id UNIQUE nullable, content_hash, synced_at, anonymised_at, timestamps)` and a partial unique index `hubrise_outbox_customer_pending_uidx (dedupe_key) WHERE state = 'pending' AND kind = 'customer'`. New table and an index on a new table only. `sync_customers` and `customer_list_name` live in M1 and the `customer` / `customer_anonymise` outbox kinds in the M3 CHECK. Backfill: none. Down: drop the index and the table.
 
@@ -559,7 +559,7 @@ As built (T9, wiring, workers, end-to-end tests, docs):
 
 A12. **Safe feature defaults.** Every feature toggle of `hubrise_connection` (`push_orders`, `sync_status`, `sync_inventory`, `sync_catalog`, `sync_customers`, plus `catalog_auto_import`, `auto_refund_on_cancel`, `import_images`) starts FALSE on a new connection. Enabling the integration (`enabled`) therefore starts nothing by itself, so orders can never be pushed before the menu is linked; the rollout ladder is: connect, enable, `LINK_ONLY` adopt, then turn each feature on by hand. M1 was edited in place (nothing is deployed). The `push_orders_since` stamping is unchanged: connecting stamps it the first time, and it is stamped again each time order pushing becomes effective (connected, enabled and `push_orders` on), so a toggle never replays history. The test seed helper (`testhelpers.SeedConnection`) keeps its own "everything on" default, which is the state of a restaurant at the end of the ladder.
 
-A13. **Migration dates.** The seven HubRise migrations are `20261024120000` .. `20261024180000` (they were dated two days ahead of the day they were written, which would have put any migration created on main in the meantime out of order). They are still strictly newer than the last migration of main before this work, `20261018120000`.
+A13. **Migration dates.** The eight HubRise migrations are `20261029120000` .. `20261029190000`. They were first dated 2026-10-24, then main shipped `20261026120000` and `20261028120000`, and goose refuses a lower version once a higher one is applied. They were never applied outside local and CI databases, so they were redated when main was merged in, and they are newer than the last migration of main, `20261028120000`. If main ships a newer migration before this lands, redate them again.
 
 A14. **Unreadable stored token is visible.** `Connection.AccessToken` reports a token that cannot be decrypted as `domain.ErrTokenUnreadable` (`HUBRISE_TOKEN_KEY` changed or lost). The client provider is wrapped by `application.WithAuthRecording` (in `Install` and in the default of `NewPush`): the first time that error occurs it stamps `auth_error_at` and `last_error` ("stored HubRise token cannot be decrypted ... reconnect to HubRise"), the same state as a 401, so the dashboard banner shows and `Connection.Active()` is false: the hooks queue nothing and the workers stop. The outbox rows already claimed are handed back with their attempt reverted. It is recorded once (an error already recorded, or a token replaced by a reconnect since the row was read, is left alone), the message never carries the token, and reconnecting stores a new token and clears the error.
 
@@ -586,7 +586,7 @@ A15. **Dashboard-owned menu published to HubRise (owner decision 2026-10-24: "on
 - In PUBLISH mode: `syncHubriseCatalog(FULL)` and `previewHubriseCatalogSync(FULL)` fail with `HUBRISE_PUBLISH_MODE`; `LINK_ONLY` (adoption of existing SKUs so they get their HubRise refs before the first publish) and `DRY_RUN` stay allowed, and `LINK_ONLY` takes the catalog advisory lock (A15.5). `CatalogDrift` does not import and does not set `catalog_update_available_at`; it runs the external-change check (A15.9). `catalogAutoImport` is false and irrelevant. The product guards (`ProductGuard`, `ChoiceGroupGuard`, `ChoiceGuard`) already key on `sync_catalog` and therefore allow everything.
 - Inventory sync (`sync_inventory`) is independent and unchanged: availability (`is_available`, option sold-out) never travels in the catalog, it stays on `PATCH /location/inventory` (decision 3). A product the shop makes unavailable is NOT written as `restrictions.enabled = false`; the publisher never writes `enabled = false` except the deal-retention case of A15.4.
 
-### A15.3 Data model (migration `20261024190000_add_catalog_publish.sql`, additive)
+### A15.3 Data model (migration `20261029190000_add_catalog_publish.sql`, additive)
 
 All statements on existing tables sit behind `SET LOCAL lock_timeout = '5s'`; no CHECK is added to an existing table that holds data; Down is working.
 1. `ALTER TABLE hubrise_connection ADD COLUMN publish_catalog BOOLEAN NOT NULL DEFAULT FALSE, ADD COLUMN publish_images BOOLEAN NOT NULL DEFAULT FALSE`. Down drops them.
@@ -736,7 +736,7 @@ Dashboard: unit tests for `utils/hubrise.ts` and the three composables (every er
 
 ### A15.13 Task order
 
-Backend B1 to B11 and dashboard D1 to D9 are listed in the planner's structured output (the workers read that list; it is the order of the commits). The migration is `20261024190000_add_catalog_publish.sql`. The README runbook (section 2 ladder) gains a "dashboard-owned menu" chapter: switch, preview, first publish, what is preserved, what the EPOS sees, reconnect for `catalog.write`, account catalogs, external edits, rollback.
+Backend B1 to B11 and dashboard D1 to D9 are listed in the planner's structured output (the workers read that list; it is the order of the commits). The migration is `20261029190000_add_catalog_publish.sql`. The README runbook (section 2 ladder) gains a "dashboard-owned menu" chapter: switch, preview, first publish, what is preserved, what the EPOS sees, reconnect for `catalog.write`, account catalogs, external edits, rollback.
 
 ## A16. Delivery platforms (2026-10-30)
 

@@ -2,6 +2,8 @@ package repository
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -71,7 +73,7 @@ func (r *OrderRepository) Save(ctx context.Context, o *domain.Order, op *[]domai
 			street_id, street_name, house_number, box_number,
 			municipality_name, postcode, address_distance, is_manual_address,
 			address_place_id, address_lat, address_lng,
-			cash_payment_amount, is_test, channel
+			cash_payment_amount, is_test, channel, idempotency_key
 		) VALUES (
 			$1, $2, $3, $4,
 			$5, $6, $7, $8, $9,
@@ -80,7 +82,7 @@ func (r *OrderRepository) Save(ctx context.Context, o *domain.Order, op *[]domai
 			$18, $19, $20, $21,
 			$22, $23, $24, $25,
 			$26, $27, $28,
-			$29, $30, $31
+			$29, $30, $31, $32
 		)
 		RETURNING id, created_at, updated_at;
 	`
@@ -123,6 +125,7 @@ func (r *OrderRepository) Save(ctx context.Context, o *domain.Order, op *[]domai
 		o.CashPaymentAmount,
 		o.IsTest,
 		o.Channel,
+		o.IdempotencyKey,
 	)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to insert order: %w", err)
@@ -233,6 +236,24 @@ func (r *OrderRepository) HasActiveCouponOrder(ctx context.Context, userID uuid.
 		return false, fmt.Errorf("failed to check active coupon order: %w", err)
 	}
 	return exists, nil
+}
+
+// FindByIdempotencyKey retrieves the user's order placed with the given checkout key, nil if none.
+func (r *OrderRepository) FindByIdempotencyKey(ctx context.Context, userID uuid.UUID, key string) (*domain.Order, error) {
+	query := `
+		SELECT ` + orderColumns + `
+		FROM orders
+		WHERE user_id = $1 AND idempotency_key = $2
+		LIMIT 1
+	`
+	var order domain.Order
+	if err := r.pool.ForContext(ctx).GetContext(ctx, &order, query, userID, key); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to query order by idempotency key: %w", err)
+	}
+	return &order, nil
 }
 
 // FindByID retrieves an order by its ID.

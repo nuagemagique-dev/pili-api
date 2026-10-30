@@ -41,6 +41,22 @@ func (r *mutationResolver) CreateOrder(ctx context.Context, input model.CreateOr
 		return nil, fmt.Errorf("invalid user ID: %w", err)
 	}
 
+	// A retry of a checkout attempt that already placed its order (the reply was lost on the way
+	// back) gets that order back instead of placing a second one.
+	idempotencyKey, err := parseIdempotencyKey(input.IdempotencyKey)
+	if err != nil {
+		return nil, err
+	}
+	if idempotencyKey != nil {
+		existing, err := r.OrderService.GetOrderByIdempotencyKey(ctx, userUUID, *idempotencyKey)
+		if err != nil {
+			return nil, apperr.Newf(apperr.CodeOrderCreateFailed, "failed to look up order by idempotency key: %w", err)
+		}
+		if existing != nil {
+			return ToGQLOrder(existing), nil
+		}
+	}
+
 	// Resolve the ordering user up front. It is needed both to flag store-review
 	// orders (Google Play / App Store reviewers place a real order on prod to
 	// validate checkout) and to let those reviewers bypass the opening-hours gate
@@ -136,6 +152,7 @@ func (r *mutationResolver) CreateOrder(ctx context.Context, input model.CreateOr
 	tempOrder.IsTest = isTestOrder
 	channel := string(couponChannel(ctx))
 	tempOrder.Channel = &channel
+	tempOrder.IdempotencyKey = idempotencyKey
 
 	// Atomically reserve coupon usage BEFORE creating the order to prevent race conditions
 	if validatedCouponID != nil {
@@ -164,6 +181,14 @@ func (r *mutationResolver) CreateOrder(ctx context.Context, input model.CreateOr
 		// when a concurrent order won the race between the check and this insert.
 		if isActiveCouponOrderConflict(err) {
 			return nil, apperr.New(apperr.CodeCouponAlreadyActive, "you already have an active order using a coupon")
+		}
+		// A concurrent request with the same key won the race past the lookup above: hand back
+		// the order it placed.
+		if isIdempotencyKeyConflict(err) {
+			existing, lookupErr := r.OrderService.GetOrderByIdempotencyKey(ctx, userUUID, *idempotencyKey)
+			if lookupErr == nil && existing != nil {
+				return ToGQLOrder(existing), nil
+			}
 		}
 		return nil, apperr.Newf(apperr.CodeOrderCreateFailed, "failed to create order: %w", err)
 	}

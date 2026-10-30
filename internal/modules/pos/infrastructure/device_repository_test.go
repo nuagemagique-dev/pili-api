@@ -81,6 +81,40 @@ func TestDeviceRepository(t *testing.T) {
 		assert.ElementsMatch(t, []string{"tok-a", "tok-new"}, tokens)
 	})
 
+	t.Run("an installation ID replaces the token, and a token replaces the installation ID", func(t *testing.T) {
+		require.NoError(t, repo.UpdateFCMInstallationID(ctx, noToken, "fid-1"))
+		d, err := repo.FindByID(ctx, noToken)
+		require.NoError(t, err)
+		require.NotNil(t, d.FCMFid)
+		assert.Equal(t, "fid-1", *d.FCMFid)
+		assert.NotNil(t, d.FCMFidUpdatedAt)
+		assert.Nil(t, d.FCMToken, "the device is pushed once, at its last registration")
+		assert.Nil(t, d.FCMTokenUpdatedAt)
+
+		require.NoError(t, repo.UpdateFCMInstallationID(ctx, revoked, "fid-hijack"))
+		r, err := repo.FindByID(ctx, revoked)
+		require.NoError(t, err)
+		assert.Nil(t, r.FCMFid, "a revoked device stores nothing")
+		assert.Equal(t, "tok-b", *r.FCMToken)
+
+		fids, err := repo.FindActiveFCMInstallationIDs(ctx)
+		require.NoError(t, err)
+		assert.Equal(t, []string{"fid-1"}, fids)
+		tokens, err := repo.FindActiveFCMTokens(ctx)
+		require.NoError(t, err)
+		assert.Equal(t, []string{"tok-a"}, tokens)
+
+		require.NoError(t, repo.UpdateFCMToken(ctx, noToken, "tok-again"))
+		d, err = repo.FindByID(ctx, noToken)
+		require.NoError(t, err)
+		assert.Equal(t, "tok-again", *d.FCMToken)
+		assert.Nil(t, d.FCMFid)
+		assert.Nil(t, d.FCMFidUpdatedAt)
+		fids, err = repo.FindActiveFCMInstallationIDs(ctx)
+		require.NoError(t, err)
+		assert.Empty(t, fids)
+	})
+
 	t.Run("a closed connection is reported by every method", func(t *testing.T) {
 		conn := testhelpers.ClosedDB(t)
 		closed := NewDeviceRepository(&db.DBPool{Customer: conn, Admin: conn})
@@ -89,6 +123,9 @@ func TestDeviceRepository(t *testing.T) {
 		assert.Error(t, closed.TouchLastSeen(ctx, active))
 		assert.Error(t, closed.UpdateFCMToken(ctx, active, "x"))
 		_, err = closed.FindActiveFCMTokens(ctx)
+		assert.Error(t, err)
+		assert.Error(t, closed.UpdateFCMInstallationID(ctx, active, "x"))
+		_, err = closed.FindActiveFCMInstallationIDs(ctx)
 		assert.Error(t, err)
 	})
 }
