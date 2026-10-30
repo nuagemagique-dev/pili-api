@@ -313,6 +313,18 @@ enum HubriseOutboxState {
   PARKED
   SKIPPED
 }
+type HubrisePlatformPrice {
+  variantRef: String!
+  name: String!
+  markupPercent: Float!
+  roundToCents: Int!
+}
+input HubrisePlatformPriceInput {
+  variantRef: String!
+  name: String!
+  markupPercent: Float!
+  roundToCents: Int!
+}
 type HubriseProductPublishInfo {
   state: HubrisePublishState!
   publishedAt: DateTime
@@ -416,6 +428,7 @@ input HubriseSettingsInput {
   channelName: String
   deliveryChargeRef: String
   paymentFeeChargeRef: String
+  platformPrices: [HubrisePlatformPriceInput!]
 }
 type HubriseStatus {
   available: Boolean!
@@ -442,6 +455,7 @@ type HubriseStatus {
   channelName: String
   deliveryChargeRef: String
   paymentFeeChargeRef: String
+  platformPrices: [HubrisePlatformPrice!]!
   importImages: Boolean!
   lastCatalogSyncAt: DateTime
   lastEventAt: DateTime

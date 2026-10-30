@@ -227,7 +227,9 @@ func TestTheFirstPublishUploadsTheImageOfTheProductOnce(t *testing.T) {
 	products := e.remoteProducts()
 	assert.Equal(t, []string{imgs[0].ID}, products[e.productRef(id)].ImageIDs)
 	assert.Empty(t, products[e.productRef(noImage)].ImageIDs)
-	assert.Empty(t, out.Plan.Warnings)
+	require.Len(t, out.Plan.Warnings, 1, "only the hidden product, as no platform price list is set")
+	assert.Equal(t, domain.WarnHiddenOnPlatforms, out.Plan.Warnings[0].Code)
+	assert.Equal(t, "M3", out.Plan.Warnings[0].Key)
 }
 
 func TestAnUnchangedImageIsNeitherDownloadedNorUploadedAgain(t *testing.T) {
