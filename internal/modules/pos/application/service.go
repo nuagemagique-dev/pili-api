@@ -46,9 +46,11 @@ func DefaultConfig(secret []byte) Config {
 const deviceStatusTTL = 30 * time.Second
 
 type Service struct {
-	cfg     Config
-	devices domain.DeviceRepository
-	active  *deviceStatusCache
+	cfg         Config
+	devices     domain.DeviceRepository
+	active      *deviceStatusCache
+	enrollments domain.EnrollmentRepository
+	deviceAdmin domain.DeviceAdminRepository
 }
 
 func NewService(cfg Config, d domain.DeviceRepository) *Service {

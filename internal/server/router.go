@@ -70,6 +70,7 @@ type Handlers struct {
 	POSDeviceLogin           gin.HandlerFunc
 	POSUpdateFCMToken        gin.HandlerFunc
 	POSUpdateFCMInstallation gin.HandlerFunc
+	POSEnroll                gin.HandlerFunc
 
 	PaymentWebhook gin.HandlerFunc
 	ImagePreview   gin.HandlerFunc
@@ -199,6 +200,10 @@ func New(cfg Config, h Handlers) (*gin.Engine, func(), error) {
 	api.POST("/pos/auth/device-login", posLimiter.Middleware(), h.POSDeviceLogin)
 	api.PATCH("/pos/devices/fcm-token", posLimiter.Middleware(), h.POSUpdateFCMToken)
 	api.PATCH("/pos/devices/fcm-installation", posLimiter.Middleware(), h.POSUpdateFCMInstallation)
+	// Runtime enrollment with a one-time code from the dashboard. The 8-character code expires
+	// after 15 minutes; 10 req/min per IP leaves guessing hopeless.
+	enrollLimiter := middleware.NewRateLimiter(10.0/60, 5)
+	api.POST("/pos/devices/enroll", enrollLimiter.Middleware(), h.POSEnroll)
 
 	// Other endpoints
 	// Mollie's webhook retries are retried ~25 times over 2 days on failure,

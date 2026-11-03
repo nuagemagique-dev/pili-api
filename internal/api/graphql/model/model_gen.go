@@ -422,6 +422,25 @@ type Payment struct {
 	SettlementAmount                *float64   `json:"settlementAmount,omitempty"`
 }
 
+// A POS handheld enrolled on this restaurant's backend.
+type PosDevice struct {
+	ID    uuid.UUID `json:"id"`
+	Label string    `json:"label"`
+	// Stable per device (the handheld derives it from ANDROID_ID); re-enrolling it keeps its id.
+	SerialNumber string     `json:"serialNumber"`
+	RegisteredAt time.Time  `json:"registeredAt"`
+	LastSeenAt   *time.Time `json:"lastSeenAt,omitempty"`
+	RevokedAt    *time.Time `json:"revokedAt,omitempty"`
+}
+
+// A one-time code that enrolls one handheld (POST /api/v1/pos/devices/enroll). It is only returned
+// here, once; the dashboard shows it as text and as a QR code together with its API base URL.
+type PosEnrollment struct {
+	// Formatted "ABCD-EFGH"; the handheld accepts it in any case, with or without the dash.
+	Code      string    `json:"code"`
+	ExpiresAt time.Time `json:"expiresAt"`
+}
+
 type Product struct {
 	Code           *string               `json:"code,omitempty"`
 	CreatedAt      time.Time             `json:"createdAt"`

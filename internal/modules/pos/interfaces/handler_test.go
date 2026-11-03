@@ -279,3 +279,86 @@ func TestUpdateFCMInstallationHandler(t *testing.T) {
 		assert.JSONEq(t, `{"error":"internal error"}`, rec.Body.String())
 	})
 }
+
+type fakeEnrollments struct {
+	codeHash string
+	device   *domain.Device
+	err      error
+}
+
+func (f *fakeEnrollments) Create(context.Context, *domain.Enrollment) error { return nil }
+func (f *fakeEnrollments) Redeem(_ context.Context, codeHash string, d domain.EnrolledDevice) (*domain.Device, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	f.codeHash = codeHash
+	f.device = &domain.Device{ID: uuid.New(), SerialNumber: d.SerialNumber, DeviceSecretHash: d.DeviceSecretHash, Label: "Comptoir"}
+	return f.device, nil
+}
+
+func newEnrollEnv(t *testing.T, enr *fakeEnrollments) *gin.Engine {
+	t.Helper()
+	gin.SetMode(gin.TestMode)
+	svc := application.NewService(application.DefaultConfig([]byte("0123456789abcdef0123456789abcdef")), &fakeDevices{}).
+		WithEnrollment(enr, nil)
+	r := gin.New()
+	r.POST("/pos/devices/enroll", NewHandler(svc).Enroll)
+	return r
+}
+
+func postJSON(r *gin.Engine, path string, body any) *httptest.ResponseRecorder {
+	var buf bytes.Buffer
+	_ = json.NewEncoder(&buf).Encode(body)
+	req := httptest.NewRequest(http.MethodPost, path, &buf)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	return rec
+}
+
+func TestEnroll(t *testing.T) {
+	secret := base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{9}, 32))
+
+	t.Run("a valid code returns the device id, its label and the restaurant", func(t *testing.T) {
+		enr := &fakeEnrollments{}
+		rec := postJSON(newEnrollEnv(t, enr), "/pos/devices/enroll",
+			map[string]string{"code": "abcd-efgh", "secret": secret, "serialNumber": "android-1"})
+		require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+		var got enrollResponse
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
+		assert.Equal(t, enr.device.ID.String(), got.DeviceID)
+		assert.Equal(t, "Comptoir", got.Label)
+		assert.NotEmpty(t, got.RestaurantName)
+
+		sum := sha256.Sum256(bytes.Repeat([]byte{9}, 32))
+		assert.Equal(t, hex.EncodeToString(sum[:]), enr.device.DeviceSecretHash, "only the secret's hash is stored")
+		code := sha256.Sum256([]byte("ABCDEFGH"))
+		assert.Equal(t, hex.EncodeToString(code[:]), enr.codeHash, "the code is normalized before hashing")
+	})
+
+	t.Run("a bad secret is a 400", func(t *testing.T) {
+		rec := postJSON(newEnrollEnv(t, &fakeEnrollments{}), "/pos/devices/enroll",
+			map[string]string{"code": "ABCD-EFGH", "secret": "c2hvcnQ=", "serialNumber": "android-1"})
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+	})
+
+	t.Run("a missing field is a 400", func(t *testing.T) {
+		rec := postJSON(newEnrollEnv(t, &fakeEnrollments{}), "/pos/devices/enroll", map[string]string{"code": "ABCD-EFGH"})
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+	})
+
+	t.Run("an invalid or used code is a 403 with a stable code", func(t *testing.T) {
+		rec := postJSON(newEnrollEnv(t, &fakeEnrollments{err: domain.ErrEnrollmentCodeInvalid}), "/pos/devices/enroll",
+			map[string]string{"code": "ABCD-EFGH", "secret": secret, "serialNumber": "android-1"})
+		assert.Equal(t, http.StatusForbidden, rec.Code)
+		assert.Contains(t, rec.Body.String(), "ENROLLMENT_CODE_INVALID")
+	})
+
+	t.Run("a database fault is a 500 and is logged", func(t *testing.T) {
+		logs := observeLogs(t)
+		rec := postJSON(newEnrollEnv(t, &fakeEnrollments{err: errors.New("db down")}), "/pos/devices/enroll",
+			map[string]string{"code": "ABCD-EFGH", "secret": secret, "serialNumber": "android-1"})
+		assert.Equal(t, http.StatusInternalServerError, rec.Code)
+		assert.Equal(t, 1, logs.FilterMessage("pos enroll error").Len())
+	})
+}

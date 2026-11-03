@@ -16,7 +16,7 @@ type DeviceRepository struct {
 	pool *db.DBPool
 }
 
-func NewDeviceRepository(pool *db.DBPool) domain.DeviceRepository {
+func NewDeviceRepository(pool *db.DBPool) *DeviceRepository {
 	return &DeviceRepository{pool: pool}
 }
 
@@ -67,4 +67,25 @@ func (r *DeviceRepository) FindActiveFCMInstallationIDs(ctx context.Context) ([]
 		return nil, err
 	}
 	return fids, nil
+}
+
+// ListAll returns every device, active ones first, newest first.
+func (r *DeviceRepository) ListAll(ctx context.Context) ([]*domain.Device, error) {
+	q := `SELECT ` + deviceColumns + ` FROM pos_devices ORDER BY revoked_at IS NOT NULL, registered_at DESC`
+	var devices []*domain.Device
+	if err := r.pool.ForContext(ctx).SelectContext(ctx, &devices, q); err != nil {
+		return nil, err
+	}
+	return devices, nil
+}
+
+// Revoke stamps revoked_at, keeping the first stamp of an already revoked device. Unknown ids
+// are sql.ErrNoRows.
+func (r *DeviceRepository) Revoke(ctx context.Context, id uuid.UUID) (*domain.Device, error) {
+	var d domain.Device
+	q := `UPDATE pos_devices SET revoked_at = COALESCE(revoked_at, now()) WHERE id = $1 RETURNING ` + deviceColumns
+	if err := r.pool.ForContext(ctx).GetContext(ctx, &d, q, id); err != nil {
+		return nil, err
+	}
+	return &d, nil
 }

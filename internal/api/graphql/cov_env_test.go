@@ -38,6 +38,7 @@ import (
 	paymentInfrastructure "tsb-service/internal/modules/payment/infrastructure"
 	posApplication "tsb-service/internal/modules/pos/application"
 	posDomain "tsb-service/internal/modules/pos/domain"
+	posInfrastructure "tsb-service/internal/modules/pos/infrastructure"
 	productApplication "tsb-service/internal/modules/product/application"
 	productInfrastructure "tsb-service/internal/modules/product/infrastructure"
 	restaurantApplication "tsb-service/internal/modules/restaurant/application"
@@ -271,16 +272,17 @@ func (e *covEnv) wire(t *testing.T, pool *db.DBPool, broker *pubsub.Broker) *res
 	paymentService := paymentApplication.NewPaymentService(paymentInfrastructure.NewPaymentRepository(pool), *mollieClient, orderService, userService, productService)
 
 	r := &resolver.Resolver{
-		Broker:                broker,
-		AddressService:        addressService,
-		CouponService:         couponService,
-		NotificationService:   notificationApplication.NewNotificationService(notificationInfrastructure.NewNotificationRepository(pool)),
-		OrderService:          orderService,
-		PaymentService:        paymentService,
-		ProductService:        productService,
-		RestaurantService:     restaurantService,
-		UserService:           userService,
-		PosService:            posApplication.NewService(posApplication.DefaultConfig([]byte("pos-test-secret")), e.Pos),
+		Broker:              broker,
+		AddressService:      addressService,
+		CouponService:       couponService,
+		NotificationService: notificationApplication.NewNotificationService(notificationInfrastructure.NewNotificationRepository(pool)),
+		OrderService:        orderService,
+		PaymentService:      paymentService,
+		ProductService:      productService,
+		RestaurantService:   restaurantService,
+		UserService:         userService,
+		PosService: posApplication.NewService(posApplication.DefaultConfig([]byte("pos-test-secret")), e.Pos).
+			WithEnrollment(posInfrastructure.NewEnrollmentRepository(pool), posInfrastructure.NewDeviceRepository(pool)),
 		CouponValidateLimiter: e.Limiters.Coupon,
 		PublicQueryLimiter:    e.Limiters.Public,
 	}

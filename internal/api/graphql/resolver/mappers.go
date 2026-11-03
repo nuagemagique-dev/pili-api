@@ -16,6 +16,7 @@ import (
 	couponDomain "tsb-service/internal/modules/coupon/domain"
 	orderDomain "tsb-service/internal/modules/order/domain"
 	paymentDomain "tsb-service/internal/modules/payment/domain"
+	posDomain "tsb-service/internal/modules/pos/domain"
 	productDomain "tsb-service/internal/modules/product/domain"
 	restaurantDomain "tsb-service/internal/modules/restaurant/domain"
 	userDomain "tsb-service/internal/modules/user/domain"
@@ -703,4 +704,15 @@ func couponCheckFailure(err error) (*apperr.Error, bool) {
 		return nil, false
 	}
 	return apperr.Newf(apperr.CodeCouponCheckFailed, "coupon check failed: %w", checkErr.Err), true
+}
+
+func toGQLPosDevice(d *posDomain.Device) *model.PosDevice {
+	return &model.PosDevice{
+		ID:           d.ID,
+		Label:        d.Label,
+		SerialNumber: d.SerialNumber,
+		RegisteredAt: d.RegisteredAt,
+		LastSeenAt:   d.LastSeenAt,
+		RevokedAt:    d.RevokedAt,
+	}
 }
