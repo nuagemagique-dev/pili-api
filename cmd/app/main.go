@@ -263,7 +263,7 @@ func main() {
 	posService := posApplication.NewService(
 		posApplication.DefaultConfig(posJWTSecret),
 		posDeviceRepo,
-	)
+	).WithEnrollment(posInfrastructure.NewEnrollmentRepository(dbPool), posDeviceRepo)
 	oidcVerifier.SetAppJWTVerifier(posService)
 	posHandler := posInterfaces.NewHandler(posService)
 
@@ -417,6 +417,7 @@ func main() {
 		POSDeviceLogin:           posHandler.DeviceLogin,
 		POSUpdateFCMToken:        posHandler.UpdateFCMToken,
 		POSUpdateFCMInstallation: posHandler.UpdateFCMInstallation,
+		POSEnroll:                posHandler.Enroll,
 
 		PaymentWebhook: paymentHandler.UpdatePaymentStatusHandler,
 		ImagePreview:   images.PreviewHandler,

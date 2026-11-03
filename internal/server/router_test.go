@@ -92,6 +92,7 @@ func handlers() server.Handlers {
 		POSDeviceLogin:           stub("POSDeviceLogin"),
 		POSUpdateFCMToken:        stub("POSUpdateFCMToken"),
 		POSUpdateFCMInstallation: stub("POSUpdateFCMInstallation"),
+		POSEnroll:                stub("POSEnroll"),
 
 		PaymentWebhook: stub("PaymentWebhook"),
 		ImagePreview:   stub("ImagePreview"),
@@ -183,6 +184,7 @@ var routes = []route{
 	{http.MethodPost, "/api/v1/pos/auth/device-login", "POSDeviceLogin", false, posBurst},
 	{http.MethodPatch, "/api/v1/pos/devices/fcm-token", "POSUpdateFCMToken", false, posBurst},
 	{http.MethodPatch, "/api/v1/pos/devices/fcm-installation", "POSUpdateFCMInstallation", false, posBurst},
+	{http.MethodPost, "/api/v1/pos/devices/enroll", "POSEnroll", false, enrollBurst},
 
 	{http.MethodPost, "/api/v1/payments/webhook", "PaymentWebhook", false, webhookBurst},
 	{http.MethodPost, "/api/v1/images/preview", "ImagePreview", true, 0},
@@ -198,6 +200,7 @@ var routes = []route{
 const (
 	authBurst     = 10
 	posBurst      = 10
+	enrollBurst   = 5
 	webhookBurst  = 10
 	feedbackBurst = 2
 )

@@ -9,6 +9,8 @@ import (
 	"go.uber.org/zap"
 
 	"tsb-service/internal/modules/pos/application"
+	"tsb-service/internal/modules/pos/domain"
+	"tsb-service/pkg/brand"
 )
 
 type Handler struct {
@@ -50,7 +52,52 @@ type fcmInstallationDTO struct {
 	HMAC      string `json:"hmac"      binding:"required"`
 }
 
+type enrollDTO struct {
+	Code         string `json:"code"         binding:"required,max=32"`
+	Secret       string `json:"secret"       binding:"required,max=64"`
+	SerialNumber string `json:"serialNumber" binding:"required,max=128"`
+}
+
+type enrollResponse struct {
+	DeviceID       string `json:"deviceId"`
+	Label          string `json:"label"`
+	RestaurantName string `json:"restaurantName"`
+}
+
 // ---- endpoints
+
+// Enroll redeems a one-time enrollment code from the dashboard. The handheld sends the secret
+// it generated; from then on it signs device-login with it like any other device.
+func (h *Handler) Enroll(c *gin.Context) {
+	var body enrollDTO
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	device, err := h.svc.Enroll(c.Request.Context(), application.EnrollInput{
+		Code:         body.Code,
+		Secret:       body.Secret,
+		SerialNumber: body.SerialNumber,
+	})
+	switch {
+	case errors.Is(err, application.ErrInvalidEnrollmentInput):
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	case errors.Is(err, domain.ErrEnrollmentCodeInvalid):
+		c.JSON(http.StatusForbidden, gin.H{"error": "enrollment code invalid or expired", "code": "ENROLLMENT_CODE_INVALID"})
+		return
+	case err != nil:
+		zap.L().Error("pos enroll error", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
+		return
+	}
+	zap.L().Info("pos device enrolled", zap.String("device_id", device.DeviceID.String()), zap.String("label", device.Label))
+	c.JSON(http.StatusOK, enrollResponse{
+		DeviceID:       device.DeviceID.String(),
+		Label:          device.Label,
+		RestaurantName: brand.Current().Name,
+	})
+}
 
 // DeviceLogin trades an HMAC-signed proof of possession for an access token.
 // No human user is involved; the device IS the principal.

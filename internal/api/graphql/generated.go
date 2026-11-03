@@ -169,6 +169,7 @@ type ComplexityRoot struct {
 	Mutation struct {
 		CreateCoupon              func(childComplexity int, input model.CreateCouponInput) int
 		CreateOrder               func(childComplexity int, input model.CreateOrderInput) int
+		CreatePosEnrollment       func(childComplexity int, label string) int
 		CreateProduct             func(childComplexity int, input model.CreateProductInput) int
 		CreateProductChoice       func(childComplexity int, input model.CreateProductChoiceInput) int
 		CreateProductChoiceGroup  func(childComplexity int, input model.CreateProductChoiceGroupInput) int
@@ -179,6 +180,7 @@ type ComplexityRoot struct {
 		RegisterDeviceToken       func(childComplexity int, deviceToken string, platform string) int
 		RegisterLiveActivityToken func(childComplexity int, orderID uuid.UUID, token string) int
 		RemoveAssistantAccount    func(childComplexity int, id string) int
+		RevokePosDevice           func(childComplexity int, id uuid.UUID) int
 		StartAssistantLink        func(childComplexity int) int
 		UnregisterDeviceToken     func(childComplexity int, deviceToken string) int
 		UpdateCoupon              func(childComplexity int, id uuid.UUID, input model.UpdateCouponInput) int
@@ -355,6 +357,20 @@ type ComplexityRoot struct {
 		WebhookURL                      func(childComplexity int) int
 	}
 
+	PosDevice struct {
+		ID           func(childComplexity int) int
+		Label        func(childComplexity int) int
+		LastSeenAt   func(childComplexity int) int
+		RegisteredAt func(childComplexity int) int
+		RevokedAt    func(childComplexity int) int
+		SerialNumber func(childComplexity int) int
+	}
+
+	PosEnrollment struct {
+		Code      func(childComplexity int) int
+		ExpiresAt func(childComplexity int) int
+	}
+
 	Product struct {
 		Category       func(childComplexity int) int
 		ChoiceGroups   func(childComplexity int) int
@@ -429,6 +445,7 @@ type ComplexityRoot struct {
 		OrderHistory          func(childComplexity int, input *model.OrderHistoryInput) int
 		Orders                func(childComplexity int) int
 		PopularProducts       func(childComplexity int, first *int) int
+		PosDevices            func(childComplexity int) int
 		Product               func(childComplexity int, id uuid.UUID) int
 		ProductCategories     func(childComplexity int) int
 		ProductCategory       func(childComplexity int, id uuid.UUID) int
@@ -516,6 +533,8 @@ type MutationResolver interface {
 	RegisterLiveActivityToken(ctx context.Context, orderID uuid.UUID, token string) (bool, error)
 	UpdateMyOrdersLanguage(ctx context.Context, language string) (int, error)
 	UpdatePaymentStatus(ctx context.Context, orderID uuid.UUID, status string) (*model.Payment, error)
+	CreatePosEnrollment(ctx context.Context, label string) (*model.PosEnrollment, error)
+	RevokePosDevice(ctx context.Context, id uuid.UUID) (*model.PosDevice, error)
 	CreateProduct(ctx context.Context, input model.CreateProductInput) (*model.Product, error)
 	UpdateProduct(ctx context.Context, id uuid.UUID, input model.UpdateProductInput) (*model.Product, error)
 	CreateProductChoiceGroup(ctx context.Context, input model.CreateProductChoiceGroupInput) (*model.ProductChoiceGroup, error)
@@ -584,6 +603,7 @@ type QueryResolver interface {
 	MyOrder(ctx context.Context, id uuid.UUID) (*model.Order, error)
 	MyOrderedProducts(ctx context.Context, first *int) ([]*model.ProductOrderCount, error)
 	PopularProducts(ctx context.Context, first *int) ([]*model.ProductOrderCount, error)
+	PosDevices(ctx context.Context) ([]*model.PosDevice, error)
 	Product(ctx context.Context, id uuid.UUID) (*model.Product, error)
 	Products(ctx context.Context) ([]*model.Product, error)
 	ProductCategory(ctx context.Context, id uuid.UUID) (*model.ProductCategory, error)
@@ -1119,6 +1139,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.CreateOrder(childComplexity, args["input"].(model.CreateOrderInput)), true
+	case "Mutation.createPosEnrollment":
+		if e.ComplexityRoot.Mutation.CreatePosEnrollment == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_createPosEnrollment_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.CreatePosEnrollment(childComplexity, args["label"].(string)), true
 	case "Mutation.createProduct":
 		if e.ComplexityRoot.Mutation.CreateProduct == nil {
 			break
@@ -1224,6 +1255,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.RemoveAssistantAccount(childComplexity, args["id"].(string)), true
+	case "Mutation.revokePosDevice":
+		if e.ComplexityRoot.Mutation.RevokePosDevice == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_revokePosDevice_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.RevokePosDevice(childComplexity, args["id"].(uuid.UUID)), true
 	case "Mutation.startAssistantLink":
 		if e.ComplexityRoot.Mutation.StartAssistantLink == nil {
 			break
@@ -2101,6 +2143,56 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.Payment.WebhookURL(childComplexity), true
 
+	case "PosDevice.id":
+		if e.ComplexityRoot.PosDevice.ID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.PosDevice.ID(childComplexity), true
+	case "PosDevice.label":
+		if e.ComplexityRoot.PosDevice.Label == nil {
+			break
+		}
+
+		return e.ComplexityRoot.PosDevice.Label(childComplexity), true
+	case "PosDevice.lastSeenAt":
+		if e.ComplexityRoot.PosDevice.LastSeenAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.PosDevice.LastSeenAt(childComplexity), true
+	case "PosDevice.registeredAt":
+		if e.ComplexityRoot.PosDevice.RegisteredAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.PosDevice.RegisteredAt(childComplexity), true
+	case "PosDevice.revokedAt":
+		if e.ComplexityRoot.PosDevice.RevokedAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.PosDevice.RevokedAt(childComplexity), true
+	case "PosDevice.serialNumber":
+		if e.ComplexityRoot.PosDevice.SerialNumber == nil {
+			break
+		}
+
+		return e.ComplexityRoot.PosDevice.SerialNumber(childComplexity), true
+
+	case "PosEnrollment.code":
+		if e.ComplexityRoot.PosEnrollment.Code == nil {
+			break
+		}
+
+		return e.ComplexityRoot.PosEnrollment.Code(childComplexity), true
+	case "PosEnrollment.expiresAt":
+		if e.ComplexityRoot.PosEnrollment.ExpiresAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.PosEnrollment.ExpiresAt(childComplexity), true
+
 	case "Product.category":
 		if e.ComplexityRoot.Product.Category == nil {
 			break
@@ -2510,6 +2602,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Query.PopularProducts(childComplexity, args["first"].(*int)), true
+	case "Query.posDevices":
+		if e.ComplexityRoot.Query.PosDevices == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Query.PosDevices(childComplexity), true
 	case "Query.product":
 		if e.ComplexityRoot.Query.Product == nil {
 			break
@@ -2981,7 +3079,7 @@ func newExecutionContext(
 	}
 }
 
-//go:embed "schema/address.graphql" "schema/assistant.graphql" "schema/coupon.graphql" "schema/directive.graphql" "schema/order.graphql" "schema/payment.graphql" "schema/product.graphql" "schema/restaurant.graphql" "schema/scalar.graphql" "schema/user.graphql"
+//go:embed "schema/address.graphql" "schema/assistant.graphql" "schema/coupon.graphql" "schema/directive.graphql" "schema/order.graphql" "schema/payment.graphql" "schema/pos.graphql" "schema/product.graphql" "schema/restaurant.graphql" "schema/scalar.graphql" "schema/user.graphql"
 var sourcesFS embed.FS
 
 func sourceData(filename string) string {
@@ -2999,6 +3097,7 @@ var sources = []*ast.Source{
 	{Name: "schema/directive.graphql", Input: sourceData("schema/directive.graphql"), BuiltIn: false},
 	{Name: "schema/order.graphql", Input: sourceData("schema/order.graphql"), BuiltIn: false},
 	{Name: "schema/payment.graphql", Input: sourceData("schema/payment.graphql"), BuiltIn: false},
+	{Name: "schema/pos.graphql", Input: sourceData("schema/pos.graphql"), BuiltIn: false},
 	{Name: "schema/product.graphql", Input: sourceData("schema/product.graphql"), BuiltIn: false},
 	{Name: "schema/restaurant.graphql", Input: sourceData("schema/restaurant.graphql"), BuiltIn: false},
 	{Name: "schema/scalar.graphql", Input: sourceData("schema/scalar.graphql"), BuiltIn: false},
@@ -3556,6 +3655,34 @@ func (ec *executionContext) childFields_Payment(ctx context.Context, field graph
 	return nil, fmt.Errorf("no field named %q was found under type Payment", field.Name)
 }
 
+func (ec *executionContext) childFields_PosDevice(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "id":
+		return ec.fieldContext_PosDevice_id(ctx, field)
+	case "label":
+		return ec.fieldContext_PosDevice_label(ctx, field)
+	case "serialNumber":
+		return ec.fieldContext_PosDevice_serialNumber(ctx, field)
+	case "registeredAt":
+		return ec.fieldContext_PosDevice_registeredAt(ctx, field)
+	case "lastSeenAt":
+		return ec.fieldContext_PosDevice_lastSeenAt(ctx, field)
+	case "revokedAt":
+		return ec.fieldContext_PosDevice_revokedAt(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type PosDevice", field.Name)
+}
+
+func (ec *executionContext) childFields_PosEnrollment(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "code":
+		return ec.fieldContext_PosEnrollment_code(ctx, field)
+	case "expiresAt":
+		return ec.fieldContext_PosEnrollment_expiresAt(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type PosEnrollment", field.Name)
+}
+
 func (ec *executionContext) childFields_Product(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 	switch field.Name {
 	case "code":
@@ -3910,6 +4037,20 @@ func (ec *executionContext) field_Mutation_createOrder_args(ctx context.Context,
 	return args, nil
 }
 
+func (ec *executionContext) field_Mutation_createPosEnrollment_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "label",
+		func(ctx context.Context, v any) (string, error) {
+			return ec.unmarshalNString2string(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["label"] = arg0
+	return args, nil
+}
+
 func (ec *executionContext) field_Mutation_createProductChoiceGroup_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -4044,6 +4185,20 @@ func (ec *executionContext) field_Mutation_removeAssistantAccount_args(ctx conte
 	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id",
 		func(ctx context.Context, v any) (string, error) {
 			return ec.unmarshalNString2string(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_revokePosDevice_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id",
+		func(ctx context.Context, v any) (uuid.UUID, error) {
+			return ec.unmarshalNID2githubᚗcomᚋgoogleᚋuuidᚐUUID(ctx, v)
 		})
 	if err != nil {
 		return nil, err
@@ -7076,6 +7231,120 @@ func (ec *executionContext) fieldContext_Mutation_updatePaymentStatus(ctx contex
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Mutation_updatePaymentStatus_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_createPosEnrollment(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_createPosEnrollment(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().CreatePosEnrollment(ctx, fc.Args["label"].(string))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				if ec.Directives.Admin == nil {
+					var zeroVal *model.PosEnrollment
+					return zeroVal, errors.New("directive admin is not implemented")
+				}
+				return ec.Directives.Admin(ctx, nil, directive0)
+			}
+
+			next = directive1
+			return next
+		},
+		func(ctx context.Context, selections ast.SelectionSet, v *model.PosEnrollment) graphql.Marshaler {
+			return ec.marshalNPosEnrollment2ᚖtsbᚑserviceᚋinternalᚋapiᚋgraphqlᚋmodelᚐPosEnrollment(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_createPosEnrollment(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_PosEnrollment(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_createPosEnrollment_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_revokePosDevice(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_revokePosDevice(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().RevokePosDevice(ctx, fc.Args["id"].(uuid.UUID))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				if ec.Directives.Admin == nil {
+					var zeroVal *model.PosDevice
+					return zeroVal, errors.New("directive admin is not implemented")
+				}
+				return ec.Directives.Admin(ctx, nil, directive0)
+			}
+
+			next = directive1
+			return next
+		},
+		func(ctx context.Context, selections ast.SelectionSet, v *model.PosDevice) graphql.Marshaler {
+			return ec.marshalNPosDevice2ᚖtsbᚑserviceᚋinternalᚋapiᚋgraphqlᚋmodelᚐPosDevice(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_revokePosDevice(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_PosDevice(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_revokePosDevice_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -10839,6 +11108,190 @@ func (ec *executionContext) fieldContext_Payment_settlementAmount(_ context.Cont
 	return graphql.NewScalarFieldContext("Payment", field, false, false, "Float")
 }
 
+func (ec *executionContext) _PosDevice_id(ctx context.Context, field graphql.CollectedField, obj *model.PosDevice) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_PosDevice_id(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v uuid.UUID) graphql.Marshaler {
+			return ec.marshalNID2githubᚗcomᚋgoogleᚋuuidᚐUUID(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_PosDevice_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("PosDevice", field, false, false, "ID")
+}
+
+func (ec *executionContext) _PosDevice_label(ctx context.Context, field graphql.CollectedField, obj *model.PosDevice) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_PosDevice_label(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Label, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_PosDevice_label(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("PosDevice", field, false, false, "String")
+}
+
+func (ec *executionContext) _PosDevice_serialNumber(ctx context.Context, field graphql.CollectedField, obj *model.PosDevice) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_PosDevice_serialNumber(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.SerialNumber, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_PosDevice_serialNumber(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("PosDevice", field, false, false, "String")
+}
+
+func (ec *executionContext) _PosDevice_registeredAt(ctx context.Context, field graphql.CollectedField, obj *model.PosDevice) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_PosDevice_registeredAt(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.RegisteredAt, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v time.Time) graphql.Marshaler {
+			return ec.marshalNDateTime2timeᚐTime(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_PosDevice_registeredAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("PosDevice", field, false, false, "DateTime")
+}
+
+func (ec *executionContext) _PosDevice_lastSeenAt(ctx context.Context, field graphql.CollectedField, obj *model.PosDevice) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_PosDevice_lastSeenAt(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.LastSeenAt, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *time.Time) graphql.Marshaler {
+			return ec.marshalODateTime2ᚖtimeᚐTime(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_PosDevice_lastSeenAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("PosDevice", field, false, false, "DateTime")
+}
+
+func (ec *executionContext) _PosDevice_revokedAt(ctx context.Context, field graphql.CollectedField, obj *model.PosDevice) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_PosDevice_revokedAt(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.RevokedAt, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *time.Time) graphql.Marshaler {
+			return ec.marshalODateTime2ᚖtimeᚐTime(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_PosDevice_revokedAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("PosDevice", field, false, false, "DateTime")
+}
+
+func (ec *executionContext) _PosEnrollment_code(ctx context.Context, field graphql.CollectedField, obj *model.PosEnrollment) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_PosEnrollment_code(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Code, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_PosEnrollment_code(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("PosEnrollment", field, false, false, "String")
+}
+
+func (ec *executionContext) _PosEnrollment_expiresAt(ctx context.Context, field graphql.CollectedField, obj *model.PosEnrollment) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_PosEnrollment_expiresAt(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ExpiresAt, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v time.Time) graphql.Marshaler {
+			return ec.marshalNDateTime2timeᚐTime(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_PosEnrollment_expiresAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("PosEnrollment", field, false, false, "DateTime")
+}
+
 func (ec *executionContext) _Product_code(ctx context.Context, field graphql.CollectedField, obj *model.Product) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -12729,6 +13182,51 @@ func (ec *executionContext) fieldContext_Query_popularProducts(ctx context.Conte
 	if fc.Args, err = ec.field_Query_popularProducts_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_posDevices(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Query_posDevices(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.Query().PosDevices(ctx)
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				if ec.Directives.Admin == nil {
+					var zeroVal []*model.PosDevice
+					return zeroVal, errors.New("directive admin is not implemented")
+				}
+				return ec.Directives.Admin(ctx, nil, directive0)
+			}
+
+			next = directive1
+			return next
+		},
+		func(ctx context.Context, selections ast.SelectionSet, v []*model.PosDevice) graphql.Marshaler {
+			return ec.marshalNPosDevice2ᚕᚖtsbᚑserviceᚋinternalᚋapiᚋgraphqlᚋmodelᚐPosDeviceᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Query_posDevices(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_PosDevice(ctx, field)
+		},
 	}
 	return fc, nil
 }
@@ -18018,6 +18516,20 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "createPosEnrollment":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_createPosEnrollment(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "revokePosDevice":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_revokePosDevice(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "createProduct":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_createProduct(ctx, field)
@@ -19137,6 +19649,102 @@ func (ec *executionContext) _Payment(ctx context.Context, sel ast.SelectionSet, 
 	return out
 }
 
+var posDeviceImplementors = []string{"PosDevice"}
+
+func (ec *executionContext) _PosDevice(ctx context.Context, sel ast.SelectionSet, obj *model.PosDevice) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, posDeviceImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := graphql.NewDeferredGroup(ctx)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("PosDevice")
+		case "id":
+			out.Values[i] = ec._PosDevice_id(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "label":
+			out.Values[i] = ec._PosDevice_label(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "serialNumber":
+			out.Values[i] = ec._PosDevice_serialNumber(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "registeredAt":
+			out.Values[i] = ec._PosDevice_registeredAt(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "lastSeenAt":
+			out.Values[i] = ec._PosDevice_lastSeenAt(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "revokedAt":
+			out.Values[i] = ec._PosDevice_revokedAt(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	if n := len(deferred.Defers); n > 0 {
+		atomic.AddInt32(&ec.Deferred, int32(min(n, math.MaxInt32)))
+		ec.ProcessDeferredGroup(deferred)
+	}
+
+	return out
+}
+
+var posEnrollmentImplementors = []string{"PosEnrollment"}
+
+func (ec *executionContext) _PosEnrollment(ctx context.Context, sel ast.SelectionSet, obj *model.PosEnrollment) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, posEnrollmentImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := graphql.NewDeferredGroup(ctx)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("PosEnrollment")
+		case "code":
+			out.Values[i] = ec._PosEnrollment_code(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "expiresAt":
+			out.Values[i] = ec._PosEnrollment_expiresAt(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	if n := len(deferred.Defers); n > 0 {
+		atomic.AddInt32(&ec.Deferred, int32(min(n, math.MaxInt32)))
+		ec.ProcessDeferredGroup(deferred)
+	}
+
+	return out
+}
+
 var productImplementors = []string{"Product"}
 
 func (ec *executionContext) _Product(ctx context.Context, sel ast.SelectionSet, obj *model.Product) graphql.Marshaler {
@@ -19613,6 +20221,12 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 				true, true,
 				func(ctx context.Context) graphql.Marshaler {
 					return ec._Query_popularProducts(ctx, field)
+				})
+		case "posDevices":
+			out.ResolveRootConcurrently(innerCtx, ec.OperationContext, i,
+				true, true,
+				func(ctx context.Context) graphql.Marshaler {
+					return ec._Query_posDevices(ctx, field)
 				})
 		case "product":
 			out.ResolveRootConcurrently(innerCtx, ec.OperationContext, i,
@@ -21045,6 +21659,38 @@ func (ec *executionContext) marshalNPayment2ᚖtsbᚑserviceᚋinternalᚋapiᚋ
 		return graphql.Null
 	}
 	return ec._Payment(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNPosDevice2ᚕᚖtsbᚑserviceᚋinternalᚋapiᚋgraphqlᚋmodelᚐPosDeviceᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.PosDevice) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNPosDevice2ᚖtsbᚑserviceᚋinternalᚋapiᚋgraphqlᚋmodelᚐPosDevice(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNPosDevice2ᚖtsbᚑserviceᚋinternalᚋapiᚋgraphqlᚋmodelᚐPosDevice(ctx context.Context, sel ast.SelectionSet, v *model.PosDevice) graphql.Marshaler {
+	if v == nil {
+		graphql.AddInvalidNullError(ctx, "PosDevice!")
+		return graphql.Null
+	}
+	return ec._PosDevice(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNPosEnrollment2ᚖtsbᚑserviceᚋinternalᚋapiᚋgraphqlᚋmodelᚐPosEnrollment(ctx context.Context, sel ast.SelectionSet, v *model.PosEnrollment) graphql.Marshaler {
+	if v == nil {
+		graphql.AddInvalidNullError(ctx, "PosEnrollment!")
+		return graphql.Null
+	}
+	return ec._PosEnrollment(ctx, sel, v)
 }
 
 func (ec *executionContext) marshalNProduct2ᚕᚖtsbᚑserviceᚋinternalᚋapiᚋgraphqlᚋmodelᚐProductᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.Product) graphql.Marshaler {

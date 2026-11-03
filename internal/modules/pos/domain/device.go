@@ -7,9 +7,9 @@ import (
 	"github.com/google/uuid"
 )
 
-// Device is the single enrolled POS handheld. Its shared HMAC secret is only
-// kept as a SHA-256 hash; the plaintext lives in the device's BuildConfig
-// (baked at APK build time).
+// Device is an enrolled POS handheld. Its shared HMAC secret is only kept as a
+// SHA-256 hash; the plaintext lives on the device (generated there at
+// enrollment, or baked into older builds).
 type Device struct {
 	ID                uuid.UUID  `db:"id"`
 	SerialNumber      string     `db:"serial_number"`
@@ -35,4 +35,11 @@ type DeviceRepository interface {
 	FindActiveFCMTokens(ctx context.Context) ([]string, error)
 	UpdateFCMInstallationID(ctx context.Context, deviceID uuid.UUID, fid string) error
 	FindActiveFCMInstallationIDs(ctx context.Context) ([]string, error)
+}
+
+// DeviceAdminRepository lists and revokes devices for the dashboard.
+type DeviceAdminRepository interface {
+	ListAll(ctx context.Context) ([]*Device, error)
+	// Revoke stamps revoked_at (kept when already set) and returns the device.
+	Revoke(ctx context.Context, id uuid.UUID) (*Device, error)
 }

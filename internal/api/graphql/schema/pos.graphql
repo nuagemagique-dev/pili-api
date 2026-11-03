@@ -1,0 +1,31 @@
+"A POS handheld enrolled on this restaurant's backend."
+type PosDevice {
+    id: ID!
+    label: String!
+    "Stable per device (the handheld derives it from ANDROID_ID); re-enrolling it keeps its id."
+    serialNumber: String!
+    registeredAt: DateTime!
+    lastSeenAt: DateTime
+    revokedAt: DateTime
+}
+
+"""
+A one-time code that enrolls one handheld (POST /api/v1/pos/devices/enroll). It is only returned
+here, once; the dashboard shows it as text and as a QR code together with its API base URL.
+"""
+type PosEnrollment {
+    "Formatted \"ABCD-EFGH\"; the handheld accepts it in any case, with or without the dash."
+    code: String!
+    expiresAt: DateTime!
+}
+
+extend type Query {
+    posDevices: [PosDevice!]! @admin
+}
+
+extend type Mutation {
+    "Creates a 15-minute one-time code; the device it enrolls is named label."
+    createPosEnrollment(label: String!): PosEnrollment! @admin
+    "Cuts the device off at once (device-login) and within 30 s for its open tokens."
+    revokePosDevice(id: ID!): PosDevice! @admin
+}
