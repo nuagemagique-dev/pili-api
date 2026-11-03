@@ -135,7 +135,7 @@ func TestUpdateOrderCouponRollback(t *testing.T) {
 	}
 
 	t.Run("cancelling an order with a coupon rolls back usage once", func(t *testing.T) {
-		repo := &fakeOrderRepo{order: newOrder(domain.OrderStatusConfirmed, new("TOKYO10"))}
+		repo := &fakeOrderRepo{order: newOrder(domain.OrderStatusPreparing, new("TOKYO10"))}
 		coupons := &fakeCouponService{coupon: &couponDomain.Coupon{ID: couponID}}
 		svc := NewOrderService(repo, coupons)
 
@@ -164,7 +164,7 @@ func TestUpdateOrderCouponRollback(t *testing.T) {
 	})
 
 	t.Run("cancelling an order without a coupon rolls back nothing", func(t *testing.T) {
-		repo := &fakeOrderRepo{order: newOrder(domain.OrderStatusConfirmed, nil)}
+		repo := &fakeOrderRepo{order: newOrder(domain.OrderStatusPreparing, nil)}
 		coupons := &fakeCouponService{coupon: &couponDomain.Coupon{ID: couponID}}
 		svc := NewOrderService(repo, coupons)
 

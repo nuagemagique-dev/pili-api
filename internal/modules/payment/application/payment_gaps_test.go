@@ -60,7 +60,7 @@ func TestRefundRemaining_RefundResponseProblems(t *testing.T) {
 	}
 
 	t.Run("a non-created answer from Mollie is not recorded as a refund", func(t *testing.T) {
-		f := newFlow(t, orderDomain.OrderStatusConfirmed, domain.PaymentStatusPaid)
+		f := newFlow(t, orderDomain.OrderStatusPreparing, domain.PaymentStatusPaid)
 		f.svc.mollieClient = mollieAnswering(t, jsonReply(http.StatusAccepted, `{"resource":"refund","id":"re_1","amount":{"currency":"EUR","value":"20.00"}}`))
 
 		refundedAmount, _, err := f.svc.refundRemaining(t.Context(), f.repo.payments["tr_1"])
@@ -72,7 +72,7 @@ func TestRefundRemaining_RefundResponseProblems(t *testing.T) {
 	})
 
 	t.Run("an unreadable refund amount is reported and not recorded", func(t *testing.T) {
-		f := newFlow(t, orderDomain.OrderStatusConfirmed, domain.PaymentStatusPaid)
+		f := newFlow(t, orderDomain.OrderStatusPreparing, domain.PaymentStatusPaid)
 		f.svc.mollieClient = mollieAnswering(t, jsonReply(http.StatusCreated, `{"resource":"refund","id":"re_1","amount":{"currency":"EUR","value":"abc"}}`))
 
 		refundedAmount, _, err := f.svc.refundRemaining(t.Context(), f.repo.payments["tr_1"])
@@ -84,7 +84,7 @@ func TestRefundRemaining_RefundResponseProblems(t *testing.T) {
 	})
 
 	t.Run("a refund Mollie accepted but the database could not record is an error", func(t *testing.T) {
-		f := newFlow(t, orderDomain.OrderStatusConfirmed, domain.PaymentStatusPaid)
+		f := newFlow(t, orderDomain.OrderStatusPreparing, domain.PaymentStatusPaid)
 		f.svc.repo = markFailingRepo{f.repo}
 
 		refundedAmount, _, err := f.svc.refundRemaining(t.Context(), f.repo.payments["tr_1"])
@@ -98,7 +98,7 @@ func TestRefundRemaining_RefundResponseProblems(t *testing.T) {
 	// Mollie refusing the refund (422) cannot be cured by retrying; an outage or a rate limit can.
 	t.Run("a refund Mollie refuses with 422 is not refundable, a 5xx or 429 is just an error to retry", func(t *testing.T) {
 		for code, notRefundable := range map[int]bool{http.StatusUnprocessableEntity: true, http.StatusInternalServerError: false, http.StatusTooManyRequests: false} {
-			f := newFlow(t, orderDomain.OrderStatusConfirmed, domain.PaymentStatusPaid)
+			f := newFlow(t, orderDomain.OrderStatusPreparing, domain.PaymentStatusPaid)
 			f.svc.mollieClient = mollieAnswering(t, jsonReply(code, fmt.Sprintf(`{"status":%d,"title":"x","detail":"The refund period has passed"}`, code)))
 
 			refundedAmount, _, err := f.svc.refundRemaining(t.Context(), f.repo.payments["tr_1"])
@@ -116,7 +116,7 @@ func TestRefundRemaining_RefundResponseProblems(t *testing.T) {
 // not "something went wrong, retry".
 func TestRefundRemaining_NotRefundable(t *testing.T) {
 	t.Run("a paid payment without amountRemaining is not refundable, and Mollie is not asked to refund it", func(t *testing.T) {
-		f := newFlow(t, orderDomain.OrderStatusConfirmed, domain.PaymentStatusPaid)
+		f := newFlow(t, orderDomain.OrderStatusPreparing, domain.PaymentStatusPaid)
 		f.mollie.noRemaining = true
 
 		refundedAmount, _, err := f.svc.refundRemaining(t.Context(), f.repo.payments["tr_1"])
@@ -128,7 +128,7 @@ func TestRefundRemaining_NotRefundable(t *testing.T) {
 	})
 
 	t.Run("a payment that has been refunded in full is not 'not refundable' although Mollie reports no amountRemaining", func(t *testing.T) {
-		f := newFlow(t, orderDomain.OrderStatusConfirmed, domain.PaymentStatusPaid)
+		f := newFlow(t, orderDomain.OrderStatusPreparing, domain.PaymentStatusPaid)
 		f.mollie.noRemaining = true
 		f.mollie.refunded = "20.00"
 

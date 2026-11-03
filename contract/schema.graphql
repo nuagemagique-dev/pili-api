@@ -448,7 +448,10 @@ type OrderQuoteSelection {
 }
 enum OrderStatusEnum {
   PENDING
-  CONFIRMED
+  """
+  Merged into PREPARING: accepted as input (saved as PREPARING) for older clients, never returned.
+  """
+  CONFIRMED @deprecated(reason: "Confirming an order now moves it to PREPARING.")
   PREPARING
   AWAITING_PICK_UP
   PICKED_UP

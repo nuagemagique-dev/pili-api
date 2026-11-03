@@ -18,7 +18,6 @@ type OrderCancellationReason string
 
 const (
 	OrderStatusPending        OrderStatus = "PENDING"
-	OrderStatusConfirmed      OrderStatus = "CONFIRMED"
 	OrderStatusPreparing      OrderStatus = "PREPARING"
 	OrderStatusAwaitingUp     OrderStatus = "AWAITING_PICK_UP"
 	OrderStatusPickedUp       OrderStatus = "PICKED_UP"
@@ -27,6 +26,19 @@ const (
 	OrderStatusCanceled       OrderStatus = "CANCELLED"
 	OrderStatusFailed         OrderStatus = "FAILED"
 )
+
+// legacyOrderStatusConfirmed was its own step between PENDING and PREPARING until the two were
+// merged (2026-11): confirming an order now starts its preparation. The GraphQL enum still accepts
+// it (deprecated) for handheld builds released before the merge; Normalize saves it as PREPARING.
+const legacyOrderStatusConfirmed OrderStatus = "CONFIRMED"
+
+// Normalize maps a status sent by an older client to the status saved today.
+func (s OrderStatus) Normalize() OrderStatus {
+	if s == legacyOrderStatusConfirmed {
+		return OrderStatusPreparing
+	}
+	return s
+}
 
 const (
 	OrderTypeDelivery OrderType = "DELIVERY"

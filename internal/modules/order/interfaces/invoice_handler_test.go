@@ -165,7 +165,7 @@ func TestDownloadInvoice_Rejections(t *testing.T) {
 		assert.NotContains(t, rec.Header().Get("Content-Type"), "pdf")
 	})
 	for _, st := range []domain.OrderStatus{
-		domain.OrderStatusPending, domain.OrderStatusConfirmed, domain.OrderStatusPreparing,
+		domain.OrderStatusPending, domain.OrderStatusPreparing,
 		domain.OrderStatusCanceled, domain.OrderStatusOutForDelivery,
 	} {
 		t.Run("status "+string(st)+" is 400", func(t *testing.T) {

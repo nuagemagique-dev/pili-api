@@ -101,12 +101,12 @@ func GetReadyTimeUpdatedNotification(language string, estimatedReadyTime *time.T
 // orderNotificationTexts holds the push title + body per status & locale.
 // Titles mirror the customer-facing email subjects (pkg/email/scaleway) so push,
 // Live Activity and email read consistently; bodies stay short and distinct from
-// the title. Statuses without a dedicated status email (PREPARING / DELIVERED /
-// PICKED_UP / FAILED) keep their own concise wording.
+// the title. PREPARING is where a confirmed order lands, so it carries the confirmation
+// wording. Statuses without a dedicated status email (DELIVERED / PICKED_UP / FAILED)
+// keep their own concise wording.
 var orderNotificationTexts = map[string]map[orderDomain.OrderStatus]notificationText{
 	"fr": {
-		orderDomain.OrderStatusConfirmed:      {Title: "Commande confirmée", Body: "Votre commande a été confirmée par le restaurant."},
-		orderDomain.OrderStatusPreparing:      {Title: "En préparation", Body: "Votre commande est en cours de préparation."},
+		orderDomain.OrderStatusPreparing:      {Title: "Commande confirmée", Body: "Le restaurant prépare votre commande."},
 		orderDomain.OrderStatusAwaitingUp:     {Title: "Votre commande est prête !", Body: "Elle est prête et vous attend."},
 		orderDomain.OrderStatusOutForDelivery: {Title: "Votre commande est en route !", Body: "Elle arrive bientôt."},
 		orderDomain.OrderStatusDelivered:      {Title: "Livrée", Body: "Votre commande a été livrée. Bon appétit !"},
@@ -115,8 +115,7 @@ var orderNotificationTexts = map[string]map[orderDomain.OrderStatus]notification
 		orderDomain.OrderStatusFailed:         {Title: "Commande échouée", Body: "Un problème est survenu avec votre commande."},
 	},
 	"en": {
-		orderDomain.OrderStatusConfirmed:      {Title: "Order confirmed", Body: "Your order has been confirmed by the restaurant."},
-		orderDomain.OrderStatusPreparing:      {Title: "Preparing your order", Body: "The kitchen is preparing your order."},
+		orderDomain.OrderStatusPreparing:      {Title: "Order confirmed", Body: "The restaurant is preparing your order."},
 		orderDomain.OrderStatusAwaitingUp:     {Title: "Your order is ready!", Body: "It's ready and waiting."},
 		orderDomain.OrderStatusOutForDelivery: {Title: "Your order is on its way!", Body: "It'll be with you soon."},
 		orderDomain.OrderStatusDelivered:      {Title: "Delivered", Body: "Your order has been delivered. Enjoy!"},
@@ -125,8 +124,7 @@ var orderNotificationTexts = map[string]map[orderDomain.OrderStatus]notification
 		orderDomain.OrderStatusFailed:         {Title: "Order failed", Body: "There was a problem with your order."},
 	},
 	"zh": {
-		orderDomain.OrderStatusConfirmed:      {Title: "订单已确认", Body: "您的订单已被餐厅确认。"},
-		orderDomain.OrderStatusPreparing:      {Title: "正在准备", Body: "您的订单正在准备中。"},
+		orderDomain.OrderStatusPreparing:      {Title: "订单已确认", Body: "餐厅正在准备您的订单。"},
 		orderDomain.OrderStatusAwaitingUp:     {Title: "您的订单已准备好！", Body: "请尽快取餐。"},
 		orderDomain.OrderStatusOutForDelivery: {Title: "您的订单正在配送中！", Body: "很快就到。"},
 		orderDomain.OrderStatusDelivered:      {Title: "已送达", Body: "您的订单已送达，祝您用餐愉快！"},
@@ -135,8 +133,7 @@ var orderNotificationTexts = map[string]map[orderDomain.OrderStatus]notification
 		orderDomain.OrderStatusFailed:         {Title: "订单失败", Body: "您的订单出现了问题。"},
 	},
 	"nl": {
-		orderDomain.OrderStatusConfirmed:      {Title: "Bestelling bevestigd", Body: "Uw bestelling is bevestigd door het restaurant."},
-		orderDomain.OrderStatusPreparing:      {Title: "In bereiding", Body: "Uw bestelling wordt bereid."},
+		orderDomain.OrderStatusPreparing:      {Title: "Bestelling bevestigd", Body: "Het restaurant bereidt uw bestelling."},
 		orderDomain.OrderStatusAwaitingUp:     {Title: "Uw bestelling is klaar!", Body: "Ze staat voor u klaar."},
 		orderDomain.OrderStatusOutForDelivery: {Title: "Uw bestelling is onderweg!", Body: "Ze is zo bij u."},
 		orderDomain.OrderStatusDelivered:      {Title: "Geleverd", Body: "Uw bestelling is geleverd. Smakelijk!"},
@@ -215,15 +212,14 @@ var pickupOverrides = map[string]map[orderDomain.OrderStatus]notificationText{
 // stepsFor() so the pushed Live Activity progress matches the in-app timeline.
 var liveActivityDeliverySteps = []orderDomain.OrderStatus{
 	orderDomain.OrderStatusPending,
-	orderDomain.OrderStatusConfirmed,
 	orderDomain.OrderStatusPreparing,
+	orderDomain.OrderStatusAwaitingUp, // ready, waiting for the courier
 	orderDomain.OrderStatusOutForDelivery,
 	orderDomain.OrderStatusDelivered,
 }
 
 var liveActivityPickupSteps = []orderDomain.OrderStatus{
 	orderDomain.OrderStatusPending,
-	orderDomain.OrderStatusConfirmed,
 	orderDomain.OrderStatusPreparing,
 	orderDomain.OrderStatusAwaitingUp,
 	orderDomain.OrderStatusPickedUp,

@@ -193,20 +193,20 @@ func TestUpdateOrderLifecycleNotifications(t *testing.T) {
 	require.NoError(t, err)
 
 	t.Run("confirming a pending order tells the customer everywhere", func(t *testing.T) {
-		got := env.mustUpdateOrder(t, order.ID, map[string]any{"status": "CONFIRMED", "estimatedReadyTime": inMinutes(30)})
-		assert.Equal(t, "CONFIRMED", got.Status)
+		got := env.mustUpdateOrder(t, order.ID, map[string]any{"status": "PREPARING", "estimatedReadyTime": inMinutes(30)})
+		assert.Equal(t, "PREPARING", got.Status)
 		require.NotNil(t, got.EstimatedReadyTime)
 		var history []string
 		for _, h := range got.StatusHistory {
 			history = append(history, h.Status)
 		}
-		assert.ElementsMatch(t, []string{"PENDING", "CONFIRMED"}, history)
+		assert.ElementsMatch(t, []string{"PENDING", "PREPARING"}, history)
 
 		// Dashboards: every order update, and this customer's order topic.
 		assert.Equal(t, order.ID, recvOrder(t, updatedAll).ID.String())
 		pubMine := recvOrder(t, mine)
 		assert.Equal(t, order.ID, pubMine.ID.String())
-		assert.Equal(t, "CONFIRMED", string(pubMine.Status))
+		assert.Equal(t, "PREPARING", string(pubMine.Status))
 
 		// E-mail, with the real order lines.
 		confirm := env.Mail.WaitSubject(t, c.email, "Order confirmed")
@@ -218,10 +218,9 @@ func TestUpdateOrderLifecycleNotifications(t *testing.T) {
 			return len(alertsFor(env.APNs, c.ios, order.ID)) == 1 && len(alerts) == 1 && len(data) == 1 && len(env.APNs.PushesTo("la-life")) == 1
 		}, 20*time.Second, 20*time.Millisecond)
 		alert := alertsFor(env.APNs, c.ios, order.ID)[0]
-		assert.Equal(t, "CONFIRMED", alert.Payload["status"])
+		assert.Equal(t, "PREPARING", alert.Payload["status"])
 		aps, _ := alert.Payload["aps"].(map[string]any)
-		body := aps["alert"].(map[string]any)["body"]
-		assert.Contains(t, body, "confirmed")
+		assert.Equal(t, "Order confirmed", aps["alert"].(map[string]any)["title"])
 
 		la, _ := env.APNs.PushesTo("la-life")[0].Payload["aps"].(map[string]any)
 		assert.Equal(t, "update", la["event"])
@@ -237,7 +236,7 @@ func TestUpdateOrderLifecycleNotifications(t *testing.T) {
 	t.Run("moving the estimate of a confirmed order tells the customer, without a status change", func(t *testing.T) {
 		before := len(env.APNs.PushesTo("la-life"))
 		got := env.mustUpdateOrder(t, order.ID, map[string]any{"estimatedReadyTime": inMinutes(50)})
-		assert.Equal(t, "CONFIRMED", got.Status)
+		assert.Equal(t, "PREPARING", got.Status)
 
 		env.Mail.WaitSubject(t, c.email, "Your order's estimated time has changed")
 		require.Eventually(t, func() bool {
@@ -281,13 +280,24 @@ func TestUpdateOrderLifecycleNotifications(t *testing.T) {
 	})
 
 	t.Run("a delivery on its way sends the on-its-way e-mail", func(t *testing.T) {
-		id := env.seedOrderRow(t, c.id, "CONFIRMED", "DELIVERY", "en")
+		id := env.seedOrderRow(t, c.id, "PREPARING", "DELIVERY", "en")
 		env.mustUpdateOrder(t, id, map[string]any{"status": "OUT_FOR_DELIVERY"})
 		env.Mail.WaitSubject(t, c.email, "Your order is on its way!")
 	})
 
+	t.Run("an older client that still sends CONFIRMED confirms the order as PREPARING", func(t *testing.T) {
+		id := env.seedOrderRow(t, c.id, "PENDING", "PICKUP", "en")
+		got := env.mustUpdateOrder(t, id, map[string]any{"status": "CONFIRMED", "estimatedReadyTime": inMinutes(25)})
+		assert.Equal(t, "PREPARING", got.Status)
+		var history []string
+		for _, h := range got.StatusHistory {
+			history = append(history, h.Status)
+		}
+		assert.Equal(t, []string{"PREPARING"}, history, "CONFIRMED is never saved")
+	})
+
 	t.Run("an unknown order is an error and publishes nothing", func(t *testing.T) {
-		_, oerr := env.updateOrderAs(t, uuid.New(), map[string]any{"status": "CONFIRMED"})
+		_, oerr := env.updateOrderAs(t, uuid.New(), map[string]any{"status": "PREPARING"})
 		require.NotNil(t, oerr)
 		assert.Equal(t, "NOT_FOUND", oerr.Extensions["code"])
 		assert.Equal(t, "order not found", oerr.Message)
@@ -301,7 +311,7 @@ func TestUpdateOrderQuietCases(t *testing.T) {
 	t.Run("a late update sends no alert and no progress e-mail, but still moves the live activity", func(t *testing.T) {
 		c := env.newPushCustomer(t, "late", true)
 		env.registerDevices(t, c, false)
-		id := env.seedOrderRow(t, c.id, "CONFIRMED", "PICKUP", "en")
+		id := env.seedOrderRow(t, c.id, "PREPARING", "PICKUP", "en")
 		_, err := env.DB.DB.ExecContext(t.Context(), `UPDATE orders SET estimated_ready_time = now() - interval '2 hours' WHERE id = $1`, id)
 		require.NoError(t, err)
 		env.addActivityToken(t, id, "la-late")
@@ -327,7 +337,7 @@ func TestUpdateOrderQuietCases(t *testing.T) {
 	t.Run("a duplicate order cancelled by staff keeps its reason and tells the customer", func(t *testing.T) {
 		c := env.newPushCustomer(t, "duplicate", true)
 		env.registerDevices(t, c, false)
-		id := env.seedOrderRow(t, c.id, "CONFIRMED", "PICKUP", "en")
+		id := env.seedOrderRow(t, c.id, "PREPARING", "PICKUP", "en")
 
 		env.mustUpdateOrder(t, id, map[string]any{"status": "CANCELLED", "cancellationReason": "DUPLICATE"})
 		var stored string
@@ -354,7 +364,7 @@ func TestUpdateOrderQuietCases(t *testing.T) {
 	t.Run("a status without a customer text sends no alert", func(t *testing.T) {
 		c := env.newPushCustomer(t, "pending", true)
 		env.registerDevices(t, c, false)
-		id := env.seedOrderRow(t, c.id, "CONFIRMED", "PICKUP", "en")
+		id := env.seedOrderRow(t, c.id, "PREPARING", "PICKUP", "en")
 		env.addActivityToken(t, id, "la-pending")
 		env.mustUpdateOrder(t, id, map[string]any{"status": "PENDING"})
 		require.Eventually(t, func() bool { return len(env.APNs.PushesTo("la-pending")) == 1 }, 20*time.Second, 20*time.Millisecond)
@@ -364,8 +374,8 @@ func TestUpdateOrderQuietCases(t *testing.T) {
 	t.Run("a customer who turned order e-mails off gets none, the order still moves on", func(t *testing.T) {
 		c := env.newPushCustomer(t, "nomail", false)
 		id := env.seedOrderRow(t, c.id, "PENDING", "PICKUP", "en")
-		got := env.mustUpdateOrder(t, id, map[string]any{"status": "CONFIRMED", "estimatedReadyTime": inMinutes(20)})
-		assert.Equal(t, "CONFIRMED", got.Status)
+		got := env.mustUpdateOrder(t, id, map[string]any{"status": "PREPARING", "estimatedReadyTime": inMinutes(20)})
+		assert.Equal(t, "PREPARING", got.Status)
 		env.mustUpdateOrder(t, id, map[string]any{"estimatedReadyTime": inMinutes(40)})
 		env.mustUpdateOrder(t, id, map[string]any{"status": "AWAITING_PICK_UP"})
 		env.mustUpdateOrder(t, id, map[string]any{"status": "CANCELLED"})

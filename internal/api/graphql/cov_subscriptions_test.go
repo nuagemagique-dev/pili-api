@@ -93,7 +93,7 @@ func TestSubscriptionResolvers(t *testing.T) {
 	agent := &fakeAgent{conn: assistantDomain.Connection{State: "ready", MaxAccounts: 3}}
 	env := setupCovEnv(t, covOptions{Agent: agent})
 	owner, _ := testhelpers.SeedCustomer(t, env.DB.DB, "subscriber")
-	orderID := env.seedOrderRow(t, owner, "CONFIRMED", "PICKUP", "en")
+	orderID := env.seedOrderRow(t, owner, "PREPARING", "PICKUP", "en")
 	r := env.Resolver
 
 	t.Run("orderCreated", func(t *testing.T) {

@@ -340,7 +340,7 @@ func TestUpdateOrderCancellationSettlesThePayment(t *testing.T) {
 		env.mustUpdateOrder(t, order.ID, map[string]any{"status": "CANCELLED"})
 		require.Len(t, env.Mollie.CallsMatching("POST /v2/payments/"+payID+"/refunds"), 1)
 
-		for _, status := range []string{"CONFIRMED", "PENDING", "PREPARING", "FAILED"} {
+		for _, status := range []string{"PENDING", "PREPARING", "FAILED"} {
 			_, oerr := env.updateOrderAs(t, order.ID, map[string]any{"status": status})
 			require.NotNil(t, oerr, status)
 			assert.Equal(t, "USER_ERROR", oerr.Extensions["code"], status)
@@ -376,7 +376,7 @@ func TestUpdateOrderCancellationSettlesThePayment(t *testing.T) {
 			_, err := env.DB.DB.ExecContext(t.Context(), `UPDATE mollie_payments SET status = $2 WHERE order_id = $1`, order.ID, status)
 			require.NoError(t, err)
 
-			_, oerr := env.updateOrderAs(t, order.ID, map[string]any{"status": "CONFIRMED"})
+			_, oerr := env.updateOrderAs(t, order.ID, map[string]any{"status": "PREPARING"})
 
 			require.NotNil(t, oerr, status)
 			assert.Equal(t, "USER_ERROR", oerr.Extensions["code"], status)
@@ -388,9 +388,9 @@ func TestUpdateOrderCancellationSettlesThePayment(t *testing.T) {
 		order := env.placeOrder(t, c, "en")
 		env.mustUpdateOrder(t, order.ID, map[string]any{"status": "CANCELLED", "cancellationReason": "OTHER"})
 
-		got := env.mustUpdateOrder(t, order.ID, map[string]any{"status": "CONFIRMED"})
+		got := env.mustUpdateOrder(t, order.ID, map[string]any{"status": "PREPARING"})
 
-		assert.Equal(t, "CONFIRMED", got.Status)
+		assert.Equal(t, "PREPARING", got.Status)
 	})
 
 	t.Run("a cancelled order whose open payment could not be cancelled may be reopened", func(t *testing.T) {
@@ -479,11 +479,11 @@ func TestUpdateOrderOtherTransitionsStayFree(t *testing.T) {
 	c := env.newPushCustomer(t, "free", false)
 
 	for _, tc := range []struct{ from, to string }{
-		{"CONFIRMED", "PENDING"},
+		{"PREPARING", "PENDING"},
 		{"DELIVERED", "PREPARING"},
 		{"DELIVERED", "PENDING"},
-		{"AWAITING_PICK_UP", "CONFIRMED"},
-		{"FAILED", "CONFIRMED"},
+		{"AWAITING_PICK_UP", "PREPARING"},
+		{"FAILED", "PREPARING"},
 		{"PENDING", "DELIVERED"},
 	} {
 		t.Run(tc.from+" to "+tc.to, func(t *testing.T) {
@@ -511,7 +511,7 @@ func TestUpdateOrderPaymentLookupFaults(t *testing.T) {
 	}
 
 	t.Run("cancelling with a failing payment lookup is refused and leaves the order alone", func(t *testing.T) {
-		id := env.seedOrderRow(t, c.id, "CONFIRMED", "PICKUP", "en")
+		id := env.seedOrderRow(t, c.id, "PREPARING", "PICKUP", "en")
 		r := env.with(func(r *resolver.Resolver) {
 			r.PaymentService = faultyPayments{PaymentService: env.Resolver.PaymentService, lookupErr: errBoom}
 		})
@@ -522,12 +522,12 @@ func TestUpdateOrderPaymentLookupFaults(t *testing.T) {
 		appErr, ok := apperr.From(err)
 		require.True(t, ok, "%v", err)
 		assert.Equal(t, apperr.CodePaymentSettlementFailed, appErr.Code)
-		assert.Equal(t, "CONFIRMED", status(id))
+		assert.Equal(t, "PREPARING", status(id))
 		waitLog(t, logs, "cannot cancel the order: payment lookup failed")
 	})
 
 	t.Run("an order the payment service reports no payment for is cancelled as a cash order", func(t *testing.T) {
-		id := env.seedOrderRow(t, c.id, "CONFIRMED", "PICKUP", "en")
+		id := env.seedOrderRow(t, c.id, "PREPARING", "PICKUP", "en")
 		r := env.with(func(r *resolver.Resolver) {
 			r.PaymentService = faultyPayments{PaymentService: env.Resolver.PaymentService, noPayment: true}
 		})
@@ -538,10 +538,10 @@ func TestUpdateOrderPaymentLookupFaults(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "CANCELLED", status(id))
 		// ... and reopened: there is no payment that was given back.
-		confirmed := orderDomain.OrderStatusConfirmed
+		confirmed := orderDomain.OrderStatusPreparing
 		_, err = r.Mutation().UpdateOrder(ctx, id, model.UpdateOrderInput{Status: &confirmed})
 		require.NoError(t, err)
-		assert.Equal(t, "CONFIRMED", status(id))
+		assert.Equal(t, "PREPARING", status(id))
 	})
 
 	t.Run("reopening with a failing payment lookup is refused and leaves the order cancelled", func(t *testing.T) {
@@ -549,7 +549,7 @@ func TestUpdateOrderPaymentLookupFaults(t *testing.T) {
 		r := env.with(func(r *resolver.Resolver) {
 			r.PaymentService = faultyPayments{PaymentService: env.Resolver.PaymentService, lookupErr: errBoom}
 		})
-		confirmed := orderDomain.OrderStatusConfirmed
+		confirmed := orderDomain.OrderStatusPreparing
 
 		_, err := r.Mutation().UpdateOrder(ctx, id, model.UpdateOrderInput{Status: &confirmed})
 

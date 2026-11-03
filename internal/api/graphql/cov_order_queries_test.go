@@ -89,7 +89,7 @@ func TestOrderReadQueries(t *testing.T) {
 	}
 	a1 := insert(alice, "PICKUP", "DELIVERED", "10.00", 5*time.Hour)
 	a2 := insert(alice, "DELIVERY", "DELIVERED", "30.00", 4*time.Hour)
-	a3 := insert(alice, "PICKUP", "CONFIRMED", "20.00", 3*time.Hour)
+	a3 := insert(alice, "PICKUP", "PREPARING", "20.00", 3*time.Hour)
 	b1 := insert(bob, "PICKUP", "DELIVERED", "40.00", 2*time.Hour)
 	b2 := insert(bob, "PICKUP", "CANCELLED", "99.00", time.Hour) // never in the history report
 
@@ -179,8 +179,12 @@ func TestOrderReadQueries(t *testing.T) {
 		require.Len(t, got.Orders, 1)
 		assert.Equal(t, a2.String(), got.Orders[0].ID)
 
-		got = runHistory(t, map[string]any{"status": "CONFIRMED"}).OrderHistory
+		got = runHistory(t, map[string]any{"status": "PREPARING"}).OrderHistory
 		require.Len(t, got.Orders, 1)
+		assert.Equal(t, a3.String(), got.Orders[0].ID)
+
+		got = runHistory(t, map[string]any{"status": "CONFIRMED"}).OrderHistory
+		require.Len(t, got.Orders, 1, "the deprecated CONFIRMED filter reads as PREPARING")
 		assert.Equal(t, a3.String(), got.Orders[0].ID)
 
 		got = runHistory(t, map[string]any{"search": "bob"}).OrderHistory
@@ -221,7 +225,7 @@ func TestOrderReadQueries(t *testing.T) {
 func TestOrderReadStepsThatFail(t *testing.T) {
 	env := setupCovEnv(t, covOptions{})
 	user, _ := testhelpers.SeedCustomer(t, env.DB.DB, "reads")
-	id := env.seedOrderRow(t, user, "CONFIRMED", "PICKUP", "en")
+	id := env.seedOrderRow(t, user, "PREPARING", "PICKUP", "en")
 	ctx := env.ctxFor(user.String(), true, "en")
 
 	orders := newFaultyOrders(env.Resolver.OrderService)

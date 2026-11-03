@@ -26,12 +26,12 @@ func TestOrderRepositoryListings(t *testing.T) {
 		}), e.line(salmon, 1, "10.00", "10.00"))
 	}
 
-	cash1 := forUser(alice, domain.OrderTypePickUp, domain.OrderStatusConfirmed, false, nil)
+	cash1 := forUser(alice, domain.OrderTypePickUp, domain.OrderStatusPreparing, false, nil)
 	cash2 := forUser(alice, domain.OrderTypeDelivery, domain.OrderStatusDelivered, false, nil)
 	paid := forUser(bob, domain.OrderTypePickUp, domain.OrderStatusPickedUp, true, nil)
 	unpaid := forUser(bob, domain.OrderTypePickUp, domain.OrderStatusPending, true, nil)
 	cancelled := forUser(bob, domain.OrderTypePickUp, domain.OrderStatusCanceled, false, nil)
-	test := forUser(alice, domain.OrderTypePickUp, domain.OrderStatusConfirmed, false, func(o *domain.Order) { o.IsTest = true })
+	test := forUser(alice, domain.OrderTypePickUp, domain.OrderStatusPreparing, false, func(o *domain.Order) { o.IsTest = true })
 	e.pay(t, paid.ID, "paid")
 	e.pay(t, unpaid.ID, "open")
 	// Deterministic chronology: cash1 is the oldest (10h ago), test the newest (5h ago).
