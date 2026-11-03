@@ -67,7 +67,7 @@ func TestUpdateOrderOfADeliveryAndRefundMailFailures(t *testing.T) {
 		testhelpers.SeedAddress(t, env.DB.DB, "addr-deliv", 2000, "4000")
 		order := mustCreateOrder(t, env.TestContext, c.token, "en", map[string]any{
 			"orderType": "DELIVERY", "isOnlinePayment": false, "addressPlaceId": "addr-deliv", "items": lines(feast, 1)})
-		env.mustUpdateOrder(t, order.ID, map[string]any{"status": "CONFIRMED", "estimatedReadyTime": inMinutes(40)})
+		env.mustUpdateOrder(t, order.ID, map[string]any{"status": "PREPARING", "estimatedReadyTime": inMinutes(40)})
 		env.Mail.WaitSubject(t, c.email, "Order confirmed")
 	})
 

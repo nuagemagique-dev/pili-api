@@ -167,7 +167,7 @@ func (f *failingDecrementCoupons) DecrementUsageAtomic(ctx context.Context, id, 
 }
 
 func TestUpdateOrderCancellationSurvivesACouponRollbackFailure(t *testing.T) {
-	repo := newHistRepo(domain.OrderStatusConfirmed, new("TOKYO10"))
+	repo := newHistRepo(domain.OrderStatusPreparing, new("TOKYO10"))
 	coupons := &failingDecrementCoupons{fakeCouponService: fakeCouponService{coupon: &couponDomain.Coupon{ID: uuid.New()}}, err: errors.New("db down")}
 	canceled := domain.OrderStatusCanceled
 

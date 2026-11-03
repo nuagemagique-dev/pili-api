@@ -18,7 +18,7 @@ func reason(r orderDomain.OrderCancellationReason) *orderDomain.OrderCancellatio
 func TestGetOrderStatusNotification(t *testing.T) {
 	t.Run("every status has a non-empty title and body in every language", func(t *testing.T) {
 		statuses := []orderDomain.OrderStatus{
-			orderDomain.OrderStatusConfirmed, orderDomain.OrderStatusPreparing, orderDomain.OrderStatusAwaitingUp,
+			orderDomain.OrderStatusPreparing, orderDomain.OrderStatusAwaitingUp,
 			orderDomain.OrderStatusOutForDelivery, orderDomain.OrderStatusDelivered, orderDomain.OrderStatusPickedUp,
 			orderDomain.OrderStatusCanceled, orderDomain.OrderStatusFailed,
 		}
@@ -32,21 +32,21 @@ func TestGetOrderStatusNotification(t *testing.T) {
 	})
 
 	t.Run("localized wording", func(t *testing.T) {
-		require.Equal(t, "Order confirmed", GetOrderStatusNotification(orderDomain.OrderStatusConfirmed, "en", "DELIVERY", nil).Title)
-		require.Equal(t, "Bestelling bevestigd", GetOrderStatusNotification(orderDomain.OrderStatusConfirmed, "nl", "DELIVERY", nil).Title)
-		require.Equal(t, "订单已确认", GetOrderStatusNotification(orderDomain.OrderStatusConfirmed, "zh", "DELIVERY", nil).Title)
-		require.Equal(t, "Commande confirmée", GetOrderStatusNotification(orderDomain.OrderStatusConfirmed, "fr", "DELIVERY", nil).Title)
+		require.Equal(t, "Order confirmed", GetOrderStatusNotification(orderDomain.OrderStatusPreparing, "en", "DELIVERY", nil).Title)
+		require.Equal(t, "Bestelling bevestigd", GetOrderStatusNotification(orderDomain.OrderStatusPreparing, "nl", "DELIVERY", nil).Title)
+		require.Equal(t, "订单已确认", GetOrderStatusNotification(orderDomain.OrderStatusPreparing, "zh", "DELIVERY", nil).Title)
+		require.Equal(t, "Commande confirmée", GetOrderStatusNotification(orderDomain.OrderStatusPreparing, "fr", "DELIVERY", nil).Title)
 	})
 
 	t.Run("unknown language falls back to French", func(t *testing.T) {
 		msg := GetOrderStatusNotification(orderDomain.OrderStatusPreparing, "de", "DELIVERY", nil)
-		require.Equal(t, "En préparation", msg.Title)
+		require.Equal(t, "Commande confirmée", msg.Title)
 	})
 
 	t.Run("language is normalised: case, region tags, unsupported values", func(t *testing.T) {
 		for in, want := range pushLanguageVariants {
 			for _, orderType := range []string{"DELIVERY", "PICKUP"} {
-				for _, s := range []orderDomain.OrderStatus{orderDomain.OrderStatusConfirmed, orderDomain.OrderStatusAwaitingUp, orderDomain.OrderStatusCanceled} {
+				for _, s := range []orderDomain.OrderStatus{orderDomain.OrderStatusPreparing, orderDomain.OrderStatusAwaitingUp, orderDomain.OrderStatusCanceled} {
 					require.Equal(t,
 						GetOrderStatusNotification(s, want, orderType, nil),
 						GetOrderStatusNotification(s, in, orderType, nil),
@@ -85,7 +85,7 @@ func TestGetOrderStatusNotification(t *testing.T) {
 
 	t.Run("pickup without an override keeps the generic text", func(t *testing.T) {
 		msg := GetOrderStatusNotification(orderDomain.OrderStatusPreparing, "fr", "PICKUP", nil)
-		require.Equal(t, "Votre commande est en cours de préparation.", msg.Body)
+		require.Equal(t, "Le restaurant prépare votre commande.", msg.Body)
 	})
 
 	t.Run("cancellation reason is appended in the customer's language", func(t *testing.T) {
@@ -121,8 +121,8 @@ func TestGetOrderStatusNotification(t *testing.T) {
 	})
 
 	t.Run("reason is ignored for non-cancelled statuses", func(t *testing.T) {
-		msg := GetOrderStatusNotification(orderDomain.OrderStatusConfirmed, "en", "DELIVERY", reason(orderDomain.OrderCancellationReasonOutOfStock))
-		require.Equal(t, "Your order has been confirmed by the restaurant.", msg.Body)
+		msg := GetOrderStatusNotification(orderDomain.OrderStatusPreparing, "en", "DELIVERY", reason(orderDomain.OrderCancellationReasonOutOfStock))
+		require.Equal(t, "The restaurant is preparing your order.", msg.Body)
 	})
 }
 
@@ -208,15 +208,14 @@ func TestLiveActivityProgress(t *testing.T) {
 		want      float64
 	}{
 		{orderDomain.OrderStatusPending, "DELIVERY", 0},
-		{orderDomain.OrderStatusConfirmed, "DELIVERY", 0.25},
-		{orderDomain.OrderStatusPreparing, "DELIVERY", 0.5},
+		{orderDomain.OrderStatusPreparing, "DELIVERY", 0.25},
+		{orderDomain.OrderStatusAwaitingUp, "DELIVERY", 0.5},
 		{orderDomain.OrderStatusOutForDelivery, "DELIVERY", 0.75},
 		{orderDomain.OrderStatusDelivered, "DELIVERY", 1},
-		{orderDomain.OrderStatusAwaitingUp, "PICKUP", 0.75},
+		{orderDomain.OrderStatusPreparing, "PICKUP", 1.0 / 3},
+		{orderDomain.OrderStatusAwaitingUp, "PICKUP", 2.0 / 3},
 		{orderDomain.OrderStatusPickedUp, "PICKUP", 1},
-		// A status absent from the flow (ready-for-pickup on a delivery order,
-		// or delivery statuses on a pickup order) maps to 0.
-		{orderDomain.OrderStatusAwaitingUp, "DELIVERY", 0},
+		// A status absent from the flow (delivery statuses on a pickup order) maps to 0.
 		{orderDomain.OrderStatusOutForDelivery, "PICKUP", 0},
 		{orderDomain.OrderStatusCanceled, "DELIVERY", 0},
 	}
@@ -228,9 +227,9 @@ func TestLiveActivityProgress(t *testing.T) {
 func TestGetLiveActivityContentState(t *testing.T) {
 	cs := GetLiveActivityContentState(orderDomain.OrderStatusPreparing, "en", "DELIVERY", nil)
 	require.Equal(t, map[string]any{
-		"title":    "Preparing your order",
-		"subtitle": "The kitchen is preparing your order.",
-		"progress": 0.5,
+		"title":    "Order confirmed",
+		"subtitle": "The restaurant is preparing your order.",
+		"progress": 0.25,
 	}, cs)
 
 	cs = GetLiveActivityContentState(orderDomain.OrderStatusCanceled, "fr", "PICKUP", reason(orderDomain.OrderCancellationReasonKitchenClosed))
@@ -246,7 +245,7 @@ func TestIsTerminalOrderStatus(t *testing.T) {
 		require.True(t, IsTerminalOrderStatus(s), s)
 	}
 	for _, s := range []orderDomain.OrderStatus{
-		orderDomain.OrderStatusPending, orderDomain.OrderStatusConfirmed, orderDomain.OrderStatusPreparing,
+		orderDomain.OrderStatusPending, orderDomain.OrderStatusPreparing,
 		orderDomain.OrderStatusAwaitingUp, orderDomain.OrderStatusOutForDelivery,
 	} {
 		require.False(t, IsTerminalOrderStatus(s), s)
@@ -268,10 +267,10 @@ func TestGetLiveUpdateData(t *testing.T) {
 		require.Equal(t, map[string]string{
 			"event":          "update",
 			"notificationId": strconv.Itoa(int(LiveUpdateNotificationID("order-1"))),
-			"title":          "Preparing your order",
-			"text":           "The kitchen is preparing your order.",
+			"title":          "Order confirmed",
+			"text":           "The restaurant is preparing your order.",
 			"progressMax":    "100",
-			"progressValue":  "50",
+			"progressValue":  "25",
 			"deepLinkUrl":    "app://orders/1",
 		}, d)
 	})

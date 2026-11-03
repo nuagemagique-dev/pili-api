@@ -956,7 +956,7 @@ func TestServicePassthroughs(t *testing.T) {
 
 func TestCreateFullRefund(t *testing.T) {
 	t.Run("refunds a paid payment once", func(t *testing.T) {
-		f := newFlow(t, orderDomain.OrderStatusConfirmed, domain.PaymentStatusPaid)
+		f := newFlow(t, orderDomain.OrderStatusPreparing, domain.PaymentStatusPaid)
 		if err := f.svc.CreateFullRefund(t.Context(), "tr_1"); err != nil {
 			t.Fatal(err)
 		}
@@ -979,7 +979,7 @@ func TestCreateFullRefund(t *testing.T) {
 
 	for _, st := range []domain.PaymentStatus{domain.PaymentStatusOpen, domain.PaymentStatusPending, domain.PaymentStatusFailed, domain.PaymentStatusCanceled, domain.PaymentStatusExpired, domain.PaymentStatusAuthorized} {
 		t.Run("refuses a "+string(st)+" payment", func(t *testing.T) {
-			f := newFlow(t, orderDomain.OrderStatusConfirmed, st)
+			f := newFlow(t, orderDomain.OrderStatusPreparing, st)
 			if err := f.svc.CreateFullRefund(t.Context(), "tr_1"); err == nil {
 				t.Fatal("want error")
 			}
@@ -990,7 +990,7 @@ func TestCreateFullRefund(t *testing.T) {
 	}
 
 	t.Run("unknown payment", func(t *testing.T) {
-		f := newFlow(t, orderDomain.OrderStatusConfirmed, domain.PaymentStatusPaid)
+		f := newFlow(t, orderDomain.OrderStatusPreparing, domain.PaymentStatusPaid)
 		if err := f.svc.CreateFullRefund(t.Context(), "tr_none"); err == nil {
 			t.Fatal("want error")
 		}
@@ -999,7 +999,7 @@ func TestCreateFullRefund(t *testing.T) {
 
 func TestRefundRemaining_Failures(t *testing.T) {
 	t.Run("Mollie rejects the refund: error, not recorded", func(t *testing.T) {
-		f := newFlow(t, orderDomain.OrderStatusConfirmed, domain.PaymentStatusPaid)
+		f := newFlow(t, orderDomain.OrderStatusPreparing, domain.PaymentStatusPaid)
 		failing := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.WriteHeader(http.StatusUnprocessableEntity)
 			_, _ = w.Write([]byte(`{"status":422,"title":"x","detail":"x"}`))
@@ -1021,7 +1021,7 @@ func TestRefundRemaining_Failures(t *testing.T) {
 	})
 
 	t.Run("partially refunded payment is refunded for what is left only", func(t *testing.T) {
-		f := newFlow(t, orderDomain.OrderStatusConfirmed, domain.PaymentStatusPaid)
+		f := newFlow(t, orderDomain.OrderStatusPreparing, domain.PaymentStatusPaid)
 		f.repo.payments["tr_1"].AmountRefunded = decimal.RequireFromString("5.00")
 		refundedAmount, _, err := f.svc.refundRemaining(t.Context(), f.repo.payments["tr_1"])
 		refunded := refundedAmount.IsPositive()
@@ -1059,7 +1059,7 @@ func TestRefundRemaining_UsesMolliesView(t *testing.T) {
 	d := decimal.RequireFromString
 
 	t.Run("a larger amountRefunded at Mollie than in our row wins, and the running total is recorded", func(t *testing.T) {
-		f := newFlow(t, orderDomain.OrderStatusConfirmed, domain.PaymentStatusPaid)
+		f := newFlow(t, orderDomain.OrderStatusPreparing, domain.PaymentStatusPaid)
 		f.repo.payments["tr_1"].AmountRefunded = d("5.00")
 		f.mollie.refunded = "8.00"
 
@@ -1081,7 +1081,7 @@ func TestRefundRemaining_UsesMolliesView(t *testing.T) {
 	// A refund can fail or be cancelled at Mollie after it was accepted: Mollie then reports less as
 	// refunded than our row, and the difference is refundable again.
 	t.Run("a smaller amountRefunded at Mollie than in our row wins: the failed refund is made again", func(t *testing.T) {
-		f := newFlow(t, orderDomain.OrderStatusConfirmed, domain.PaymentStatusPaid)
+		f := newFlow(t, orderDomain.OrderStatusPreparing, domain.PaymentStatusPaid)
 		f.repo.payments["tr_1"].AmountRefunded = d("20.00")
 		f.mollie.refunded = "5.00"
 
@@ -1100,7 +1100,7 @@ func TestRefundRemaining_UsesMolliesView(t *testing.T) {
 	})
 
 	t.Run("a row that says fully refunded is corrected when Mollie says part of it came back", func(t *testing.T) {
-		f := newFlow(t, orderDomain.OrderStatusConfirmed, domain.PaymentStatusPaid)
+		f := newFlow(t, orderDomain.OrderStatusPreparing, domain.PaymentStatusPaid)
 		f.repo.payments["tr_1"].AmountRefunded = d("20.00")
 		f.mollie.refunded = "12.00"
 		f.mollie.remaining = "0.00" // e.g. a chargeback took the rest: nothing can be refunded
@@ -1117,7 +1117,7 @@ func TestRefundRemaining_UsesMolliesView(t *testing.T) {
 	})
 
 	t.Run("without amountRefunded from Mollie, our row is used", func(t *testing.T) {
-		f := newFlow(t, orderDomain.OrderStatusConfirmed, domain.PaymentStatusPaid)
+		f := newFlow(t, orderDomain.OrderStatusPreparing, domain.PaymentStatusPaid)
 		f.repo.payments["tr_1"].AmountRefunded = d("8.00")
 
 		if _, _, err := f.svc.refundRemaining(t.Context(), f.repo.payments["tr_1"]); err != nil {
@@ -1129,7 +1129,7 @@ func TestRefundRemaining_UsesMolliesView(t *testing.T) {
 	})
 
 	t.Run("amountRemaining caps the refund (chargebacks)", func(t *testing.T) {
-		f := newFlow(t, orderDomain.OrderStatusConfirmed, domain.PaymentStatusPaid)
+		f := newFlow(t, orderDomain.OrderStatusPreparing, domain.PaymentStatusPaid)
 		f.mollie.remaining = "12.50"
 
 		if _, _, err := f.svc.refundRemaining(t.Context(), f.repo.payments["tr_1"]); err != nil {
@@ -1141,7 +1141,7 @@ func TestRefundRemaining_UsesMolliesView(t *testing.T) {
 	})
 
 	t.Run("a payment Mollie reports as fully refunded is not refunded again and our row catches up", func(t *testing.T) {
-		f := newFlow(t, orderDomain.OrderStatusConfirmed, domain.PaymentStatusPaid)
+		f := newFlow(t, orderDomain.OrderStatusPreparing, domain.PaymentStatusPaid)
 		f.mollie.refunded = "20.00"
 		f.mollie.remaining = "0.00"
 
@@ -1160,7 +1160,7 @@ func TestRefundRemaining_UsesMolliesView(t *testing.T) {
 	})
 
 	t.Run("failing to record a refund Mollie already made is not an error", func(t *testing.T) {
-		f := newFlow(t, orderDomain.OrderStatusConfirmed, domain.PaymentStatusPaid)
+		f := newFlow(t, orderDomain.OrderStatusPreparing, domain.PaymentStatusPaid)
 		f.mollie.refunded = "20.00"
 		f.svc.repo = markFailingRepo{f.repo}
 
@@ -1173,7 +1173,7 @@ func TestRefundRemaining_UsesMolliesView(t *testing.T) {
 	})
 
 	t.Run("a Mollie lookup failure stops the refund before any money moves", func(t *testing.T) {
-		f := newFlow(t, orderDomain.OrderStatusConfirmed, domain.PaymentStatusPaid)
+		f := newFlow(t, orderDomain.OrderStatusPreparing, domain.PaymentStatusPaid)
 		f.mollie.getStatusCode = http.StatusInternalServerError
 
 		refundedAmount, _, err := f.svc.refundRemaining(t.Context(), f.repo.payments["tr_1"])
@@ -1192,7 +1192,7 @@ func TestRefundRemaining_UsesMolliesView(t *testing.T) {
 			"amountRefunded":  func(m *flowMollie) { m.refunded = "abc" },
 			"amountRemaining": func(m *flowMollie) { m.remaining = "abc" },
 		} {
-			f := newFlow(t, orderDomain.OrderStatusConfirmed, domain.PaymentStatusPaid)
+			f := newFlow(t, orderDomain.OrderStatusPreparing, domain.PaymentStatusPaid)
 			set(f.mollie)
 
 			_, _, err := f.svc.refundRemaining(t.Context(), f.repo.payments["tr_1"])

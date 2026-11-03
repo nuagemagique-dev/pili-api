@@ -288,6 +288,10 @@ func (r *mutationResolver) UpdateOrder(ctx context.Context, id uuid.UUID, input 
 	if err != nil {
 		return nil, orderLookupError(err)
 	}
+	if input.Status != nil {
+		status := input.Status.Normalize()
+		input.Status = &status
+	}
 
 	if err := r.refuseReopeningSettledOrder(ctx, oldOrder, input.Status); err != nil {
 		return nil, err
@@ -331,8 +335,9 @@ func (r *mutationResolver) UpdateOrder(ctx context.Context, id uuid.UUID, input 
 		)
 	}
 
-	// If new status is "CONFIRMED" or "PREPARING", send the confirmation email
-	if oldOrder.OrderStatus == orderDomain.OrderStatusPending && (o.OrderStatus == orderDomain.OrderStatusConfirmed || o.OrderStatus == orderDomain.OrderStatusPreparing) {
+	// Confirming a PENDING order (it goes straight to PREPARING) sends the confirmation email
+	isInitialConfirmation := oldOrder.OrderStatus == orderDomain.OrderStatusPending && o.OrderStatus == orderDomain.OrderStatusPreparing
+	if isInitialConfirmation {
 		go func() {
 			ctx, cancel := emailContext()
 			defer cancel()
@@ -425,8 +430,6 @@ func (r *mutationResolver) UpdateOrder(ctx context.Context, id uuid.UUID, input 
 	}
 
 	// If estimated ready time changed on an already-confirmed order (not the initial confirmation)
-	isInitialConfirmation := oldOrder.OrderStatus == orderDomain.OrderStatusPending &&
-		(o.OrderStatus == orderDomain.OrderStatusConfirmed || o.OrderStatus == orderDomain.OrderStatusPreparing)
 	readyTimeWasUpdated := input.EstimatedReadyTime != nil &&
 		o.EstimatedReadyTime != nil &&
 		!isInitialConfirmation &&
@@ -1098,7 +1101,7 @@ func (r *queryResolver) OrderHistory(ctx context.Context, input *model.OrderHist
 		filter.Search = input.Search
 
 		if input.Status != nil {
-			s := orderDomain.OrderStatus(*input.Status)
+			s := orderDomain.OrderStatus(*input.Status).Normalize()
 			filter.Status = &s
 		}
 		if input.OrderType != nil {

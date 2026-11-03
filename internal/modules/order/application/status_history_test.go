@@ -90,23 +90,23 @@ func TestCreateOrderRecordsInitialStatus(t *testing.T) {
 }
 
 func TestUpdateOrderStatusHistory(t *testing.T) {
-	confirmed, canceled := domain.OrderStatusConfirmed, domain.OrderStatusCanceled
+	confirmed, canceled := domain.OrderStatusPreparing, domain.OrderStatusCanceled
 
 	t.Run("a status change writes exactly one history row", func(t *testing.T) {
 		repo := newHistRepo(domain.OrderStatusPending, nil)
 		if err := NewOrderService(repo, nil).UpdateOrder(t.Context(), repo.order.ID, &confirmed, nil, nil); err != nil {
 			t.Fatal(err)
 		}
-		if len(repo.history) != 1 || repo.history[0] != domain.OrderStatusConfirmed {
+		if len(repo.history) != 1 || repo.history[0] != domain.OrderStatusPreparing {
 			t.Fatalf("history = %v", repo.history)
 		}
-		if repo.updatedOrder == nil || repo.updatedOrder.OrderStatus != domain.OrderStatusConfirmed {
+		if repo.updatedOrder == nil || repo.updatedOrder.OrderStatus != domain.OrderStatusPreparing {
 			t.Fatal("order not persisted with the new status")
 		}
 	})
 
 	t.Run("same status writes no history row", func(t *testing.T) {
-		repo := newHistRepo(domain.OrderStatusConfirmed, nil)
+		repo := newHistRepo(domain.OrderStatusPreparing, nil)
 		if err := NewOrderService(repo, nil).UpdateOrder(t.Context(), repo.order.ID, &confirmed, nil, nil); err != nil {
 			t.Fatal(err)
 		}
@@ -116,7 +116,7 @@ func TestUpdateOrderStatusHistory(t *testing.T) {
 	})
 
 	t.Run("nil status with a new ready time writes no history row", func(t *testing.T) {
-		repo := newHistRepo(domain.OrderStatusConfirmed, nil)
+		repo := newHistRepo(domain.OrderStatusPreparing, nil)
 		eta := time.Now().Add(20 * time.Minute)
 		if err := NewOrderService(repo, nil).UpdateOrder(t.Context(), repo.order.ID, nil, &eta, nil); err != nil {
 			t.Fatal(err)
@@ -127,7 +127,7 @@ func TestUpdateOrderStatusHistory(t *testing.T) {
 		if repo.updatedOrder.EstimatedReadyTime == nil || !repo.updatedOrder.EstimatedReadyTime.Equal(eta) {
 			t.Fatal("ready time not persisted")
 		}
-		if repo.updatedOrder.OrderStatus != domain.OrderStatusConfirmed {
+		if repo.updatedOrder.OrderStatus != domain.OrderStatusPreparing {
 			t.Fatal("status must be untouched")
 		}
 	})
@@ -232,7 +232,7 @@ func TestUpdateOrderCouponRollbackFailuresNeverFailTheCancellation(t *testing.T)
 	})
 
 	t.Run("only the transition into CANCELLED rolls back, not FAILED or others", func(t *testing.T) {
-		for _, st := range []domain.OrderStatus{domain.OrderStatusConfirmed, domain.OrderStatusFailed, domain.OrderStatusPreparing} {
+		for _, st := range []domain.OrderStatus{domain.OrderStatusAwaitingUp, domain.OrderStatusFailed, domain.OrderStatusPreparing} {
 			repo := newHistRepo(domain.OrderStatusPending, new("TOKYO10"))
 			coupons := &fakeCouponService{coupon: &couponDomain.Coupon{ID: uuid.New()}}
 			if err := NewOrderService(repo, coupons).UpdateOrder(t.Context(), repo.order.ID, &st, nil, nil); err != nil {

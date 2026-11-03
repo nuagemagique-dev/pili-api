@@ -208,7 +208,7 @@ func TestRegisterLiveActivityToken(t *testing.T) {
 	env := setupCovEnv(t, covOptions{})
 	owner, ownerTok := testhelpers.SeedCustomer(t, env.DB.DB, "owner")
 	_, strangerTok := testhelpers.SeedCustomer(t, env.DB.DB, "stranger")
-	orderID := env.seedOrderRow(t, owner, "CONFIRMED", "PICKUP", "fr")
+	orderID := env.seedOrderRow(t, owner, "PREPARING", "PICKUP", "fr")
 	const m = `mutation ($o: ID!, $t: String!) { registerLiveActivityToken(orderId: $o, token: $t) }`
 
 	t.Run("the owner binds an activity token to their order", func(t *testing.T) {
@@ -268,7 +268,7 @@ func TestUpdateMyOrdersLanguage(t *testing.T) {
 	})
 
 	pending := env.seedOrderRow(t, owner, "PENDING", "PICKUP", "fr")
-	confirmed := env.seedOrderRow(t, owner, "CONFIRMED", "PICKUP", "fr")
+	confirmed := env.seedOrderRow(t, owner, "PREPARING", "PICKUP", "fr")
 	delivered := env.seedOrderRow(t, owner, "DELIVERED", "DELIVERY", "fr")
 	_, err := env.DB.DB.ExecContext(t.Context(), `INSERT INTO live_activity_tokens (order_id, push_token) VALUES ($1, 'la-ok'), ($1, 'dead-ios')`, confirmed)
 	require.NoError(t, err)
@@ -291,7 +291,7 @@ func TestUpdateMyOrdersLanguage(t *testing.T) {
 		assert.Equal(t, "update", aps["event"])
 		state, _ := aps["content-state"].(map[string]any)
 		assert.NotEmpty(t, state["subtitle"])
-		assert.Equal(t, notificationApplication.GetLiveActivityContentState(orderDomain.OrderStatusConfirmed, "nl", "PICKUP", nil)["subtitle"], state["subtitle"])
+		assert.Equal(t, notificationApplication.GetLiveActivityContentState(orderDomain.OrderStatusPreparing, "nl", "PICKUP", nil)["subtitle"], state["subtitle"])
 
 		// ...and the Android devices (not the iOS one) get a data message with the Dutch text.
 		require.Eventually(t, func() bool { return len(env.FCM.PushesTo("phone-android")) == 1 }, 20*time.Second, 20*time.Millisecond)

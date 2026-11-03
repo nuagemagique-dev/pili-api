@@ -16,7 +16,7 @@ import (
 )
 
 // OrderStatuses are the upstream order statuses.
-var OrderStatuses = []string{"PENDING", "CONFIRMED", "PREPARING", "AWAITING_PICK_UP", "PICKED_UP", "OUT_FOR_DELIVERY", "DELIVERED", "CANCELLED", "FAILED"}
+var OrderStatuses = []string{"PENDING", "PREPARING", "AWAITING_PICK_UP", "PICKED_UP", "OUT_FOR_DELIVERY", "DELIVERED", "CANCELLED", "FAILED"}
 
 // OrderSummaryOut is an order in a list.
 type OrderSummaryOut struct {
@@ -102,7 +102,7 @@ func registerOrders(s *mcp.Server, d *Deps) {
 	type ListIn struct {
 		From   string `json:"from,omitempty" jsonschema:"yyyy-mm-dd or ISO 8601 start (inclusive)"`
 		To     string `json:"to,omitempty" jsonschema:"yyyy-mm-dd (whole day included) or ISO 8601 end"`
-		Status string `json:"status,omitempty" jsonschema:"PENDING, CONFIRMED, PREPARING, AWAITING_PICK_UP, PICKED_UP, OUT_FOR_DELIVERY, DELIVERED, CANCELLED or FAILED"`
+		Status string `json:"status,omitempty" jsonschema:"PENDING, PREPARING, AWAITING_PICK_UP, PICKED_UP, OUT_FOR_DELIVERY, DELIVERED, CANCELLED or FAILED"`
 		Limit  int    `json:"limit,omitempty" jsonschema:"default 20, max 100"`
 	}
 	type ListOut struct {

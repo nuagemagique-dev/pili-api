@@ -134,7 +134,7 @@ func TestOrderRepository(t *testing.T) {
 	})
 
 	t.Run("Save without lines keeps the caller supplied total", func(t *testing.T) {
-		o := e.newOrder(domain.OrderStatusConfirmed, func(o *domain.Order) { o.TotalPrice = dec("12.30") })
+		o := e.newOrder(domain.OrderStatusPreparing, func(o *domain.Order) { o.TotalPrice = dec("12.30") })
 		saved, lines, err := e.repo.Save(e.ctx, o, nil)
 		require.NoError(t, err)
 		assert.Nil(t, lines)
@@ -255,15 +255,15 @@ func TestOrderRepository(t *testing.T) {
 
 	t.Run("InsertStatusHistory and FindStatusHistoryByOrderID keep chronological order", func(t *testing.T) {
 		saved := e.save(t, e.newOrder(domain.OrderStatusPending, nil))
-		for _, st := range []domain.OrderStatus{domain.OrderStatusPending, domain.OrderStatusConfirmed, domain.OrderStatusPreparing} {
+		for _, st := range []domain.OrderStatus{domain.OrderStatusPending, domain.OrderStatusPreparing, domain.OrderStatusAwaitingUp} {
 			require.NoError(t, e.repo.InsertStatusHistory(e.ctx, saved.ID, st))
 		}
 		hist, err := e.repo.FindStatusHistoryByOrderID(e.ctx, saved.ID)
 		require.NoError(t, err)
 		require.Len(t, hist, 3)
 		assert.Equal(t, domain.OrderStatusPending, hist[0].Status)
-		assert.Equal(t, domain.OrderStatusConfirmed, hist[1].Status)
-		assert.Equal(t, domain.OrderStatusPreparing, hist[2].Status)
+		assert.Equal(t, domain.OrderStatusPreparing, hist[1].Status)
+		assert.Equal(t, domain.OrderStatusAwaitingUp, hist[2].Status)
 		assert.Equal(t, saved.ID, hist[0].OrderID)
 
 		none, err := e.repo.FindStatusHistoryByOrderID(e.ctx, uuid.New())

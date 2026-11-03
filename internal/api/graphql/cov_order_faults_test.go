@@ -49,7 +49,7 @@ func TestUpdateOrderStepsThatFail(t *testing.T) {
 		orders := newFaultyOrders(env.Resolver.OrderService)
 		orders.getFailsAfter = 0
 		r := env.with(func(r *resolver.Resolver) { r.OrderService = orders })
-		got, err := r.Mutation().UpdateOrder(ctx, id, model.UpdateOrderInput{Status: status(orderDomain.OrderStatusConfirmed)})
+		got, err := r.Mutation().UpdateOrder(ctx, id, model.UpdateOrderInput{Status: status(orderDomain.OrderStatusPreparing)})
 		require.ErrorContains(t, err, "failed to get order")
 		assert.Nil(t, got)
 	})
@@ -58,7 +58,7 @@ func TestUpdateOrderStepsThatFail(t *testing.T) {
 		orders := newFaultyOrders(env.Resolver.OrderService)
 		orders.failUpdate = true
 		r := env.with(func(r *resolver.Resolver) { r.OrderService = orders })
-		got, err := r.Mutation().UpdateOrder(ctx, id, model.UpdateOrderInput{Status: status(orderDomain.OrderStatusConfirmed)})
+		got, err := r.Mutation().UpdateOrder(ctx, id, model.UpdateOrderInput{Status: status(orderDomain.OrderStatusPreparing)})
 		require.ErrorContains(t, err, "failed to update order status")
 		assert.Nil(t, got)
 		assert.Equal(t, "PENDING", orderStatusInDB(t, env, id))
@@ -98,7 +98,7 @@ func TestUpdateOrderSideEffectsThatFail(t *testing.T) {
 		})
 		id := env.seedOrderRow(t, c.id, "PENDING", "PICKUP", "en")
 
-		update(r, id, model.UpdateOrderInput{Status: status(orderDomain.OrderStatusConfirmed), EstimatedReadyTime: eta(30)})
+		update(r, id, model.UpdateOrderInput{Status: status(orderDomain.OrderStatusPreparing), EstimatedReadyTime: eta(30)})
 		waitOrderLogCount(t, logs, "failed to retrieve user", id.String(), 1)
 		update(r, id, model.UpdateOrderInput{EstimatedReadyTime: eta(50)})
 		waitOrderLogCount(t, logs, "failed to retrieve user", id.String(), 2)
@@ -115,7 +115,7 @@ func TestUpdateOrderSideEffectsThatFail(t *testing.T) {
 		r := env.with(func(r *resolver.Resolver) {
 			r.ProductService = faultyProducts{ProductService: env.Resolver.ProductService, failInvoiceNames: true}
 		})
-		update(r, uuid.MustParse(order.ID), model.UpdateOrderInput{Status: status(orderDomain.OrderStatusConfirmed)})
+		update(r, uuid.MustParse(order.ID), model.UpdateOrderInput{Status: status(orderDomain.OrderStatusPreparing)})
 		waitLog(t, logs, "failed to retrieve products")
 	})
 
@@ -125,7 +125,7 @@ func TestUpdateOrderSideEffectsThatFail(t *testing.T) {
 		r := env.with(func(r *resolver.Resolver) {
 			r.ProductService = faultyProducts{ProductService: env.Resolver.ProductService, emptyInvoiceNames: true}
 		})
-		update(r, uuid.MustParse(order.ID), model.UpdateOrderInput{Status: status(orderDomain.OrderStatusConfirmed)})
+		update(r, uuid.MustParse(order.ID), model.UpdateOrderInput{Status: status(orderDomain.OrderStatusPreparing)})
 		waitLog(t, logs, "missing product details")
 	})
 
@@ -136,7 +136,7 @@ func TestUpdateOrderSideEffectsThatFail(t *testing.T) {
 		order := env.placeOrder(t, c, "en") // the "received" e-mail bounces
 		waitLog(t, logs, "failed to send order pending email")
 		id := uuid.MustParse(order.ID)
-		update(env.Resolver, id, model.UpdateOrderInput{Status: status(orderDomain.OrderStatusConfirmed), EstimatedReadyTime: eta(30)})
+		update(env.Resolver, id, model.UpdateOrderInput{Status: status(orderDomain.OrderStatusPreparing), EstimatedReadyTime: eta(30)})
 		waitLog(t, logs, "failed to send order confirmed email")
 		update(env.Resolver, id, model.UpdateOrderInput{EstimatedReadyTime: eta(50)})
 		waitLog(t, logs, "failed to send ready time updated email")
@@ -162,7 +162,7 @@ func TestUpdateOrderSideEffectsThatFail(t *testing.T) {
 		together := env.with(func(r *resolver.Resolver) {
 			r.NotificationService = faultyNotif{NotificationService: env.Notif, meet: 2, arrived: &atomic.Int32{}, t: t}
 		})
-		update(together, id, model.UpdateOrderInput{Status: status(orderDomain.OrderStatusConfirmed)})
+		update(together, id, model.UpdateOrderInput{Status: status(orderDomain.OrderStatusPreparing)})
 		waitLog(t, logs, "failed to send alert push")
 		waitLog(t, logs, "failed to send FCM push")
 		waitLog(t, logs, "failed to send live activity push")
@@ -180,7 +180,7 @@ func TestUpdateOrderSideEffectsThatFail(t *testing.T) {
 	t.Run("the ready-time alert reaches working devices and drops dead ones", func(t *testing.T) {
 		c := env.newPushCustomer(t, "badeta", false)
 		env.registerDevices(t, c, true)
-		id := env.seedOrderRow(t, c.id, "CONFIRMED", "PICKUP", "en")
+		id := env.seedOrderRow(t, c.id, "PREPARING", "PICKUP", "en")
 		_, err := env.DB.DB.ExecContext(t.Context(), `UPDATE orders SET estimated_ready_time = now() + interval '10 minutes' WHERE id = $1`, id)
 		require.NoError(t, err)
 
@@ -198,7 +198,7 @@ func TestUpdateOrderSideEffectsThatFail(t *testing.T) {
 
 	t.Run("a live activity whose tokens cannot be cleared is logged", func(t *testing.T) {
 		c := env.newPushCustomer(t, "noclear", false)
-		id := env.seedOrderRow(t, c.id, "CONFIRMED", "PICKUP", "en")
+		id := env.seedOrderRow(t, c.id, "PREPARING", "PICKUP", "en")
 		env.addActivityToken(t, id, "la-noclear")
 		r := env.with(func(r *resolver.Resolver) {
 			r.NotificationService = faultyNotif{NotificationService: env.Notif, clearActivity: true}
@@ -214,7 +214,7 @@ func TestUpdateOrderSideEffectsThatFail(t *testing.T) {
 		r := env.with(func(r *resolver.Resolver) {
 			r.NotificationService = faultyNotif{NotificationService: env.Notif, tokens: true, activityTokens: true}
 		})
-		update(r, id, model.UpdateOrderInput{Status: status(orderDomain.OrderStatusConfirmed)})
+		update(r, id, model.UpdateOrderInput{Status: status(orderDomain.OrderStatusPreparing)})
 		require.Never(t, func() bool { return len(env.APNs.PushesTo(c.ios)) > 0 }, 300*time.Millisecond, 20*time.Millisecond)
 	})
 }
