@@ -18,6 +18,11 @@ type fakeOrderRepo struct {
 	order           *domain.Order
 	updatedOrder    *domain.Order
 	staleTestOrders []domain.CancelledOrderRef
+
+	completed        []*domain.Order
+	completeErr      error
+	unhandledPending []uuid.UUID
+	pendingErr       error
 }
 
 func (f *fakeOrderRepo) Save(_ context.Context, o *domain.Order, op *[]domain.OrderProductRaw) (*domain.Order, *[]domain.OrderProductRaw, error) {
@@ -69,6 +74,14 @@ func (f *fakeOrderRepo) InsertStatusHistory(_ context.Context, _ uuid.UUID, _ do
 
 func (f *fakeOrderRepo) CancelStaleTestOrders(_ context.Context, _ time.Duration) ([]domain.CancelledOrderRef, error) {
 	return f.staleTestOrders, nil
+}
+
+func (f *fakeOrderRepo) CompleteInProgressOrders(_ context.Context) ([]*domain.Order, error) {
+	return f.completed, f.completeErr
+}
+
+func (f *fakeOrderRepo) FindUnhandledPendingOrderIDs(_ context.Context) ([]uuid.UUID, error) {
+	return f.unhandledPending, f.pendingErr
 }
 
 func (f *fakeOrderRepo) FindStatusHistoryByOrderID(_ context.Context, _ uuid.UUID) ([]*domain.OrderStatusHistory, error) {

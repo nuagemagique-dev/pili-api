@@ -47,6 +47,14 @@ type OrderRepository interface {
 	// CancelStaleTestOrders cancels store-review test orders older than olderThan
 	// that are not already terminal, returning the affected orders. TEMPORARY.
 	CancelStaleTestOrders(ctx context.Context, olderThan time.Duration) ([]CancelledOrderRef, error)
+	// CompleteInProgressOrders moves every accepted, still open order (PREPARING,
+	// AWAITING_PICK_UP, OUT_FOR_DELIVERY) to its completed status: DELIVERED for a
+	// delivery, PICKED_UP for a pickup. Store-review test orders are left alone. It
+	// returns the orders it changed, so concurrent runs never complete one twice.
+	CompleteInProgressOrders(ctx context.Context) ([]*Order, error)
+	// FindUnhandledPendingOrderIDs lists the PENDING orders staff can see (cash
+	// orders, or online orders whose payment went through) that nobody accepted.
+	FindUnhandledPendingOrderIDs(ctx context.Context) ([]uuid.UUID, error)
 	FindStatusHistoryByOrderID(ctx context.Context, orderID uuid.UUID) ([]*OrderStatusHistory, error)
 	DeleteOrder(ctx context.Context, orderID uuid.UUID) error
 	GetCustomerStats(ctx context.Context, startDate, endDate *time.Time, orderType *string, minOrders *int) ([]*CustomerStatsRow, error)

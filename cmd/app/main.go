@@ -493,6 +493,34 @@ func main() {
 		}
 	}()
 
+	// Nightly close at 23:58 (Brussels): every accepted order still open becomes
+	// DELIVERED or PICKED_UP, so the next service starts with an empty board. It is
+	// silent for customers (no push, no e-mail); staff screens get orderUpdated.
+	// PENDING orders nobody accepted are left alone and logged: a paid one needs a
+	// refund decision. Admin context: writes go through the admin DB pool.
+	dayCloseCtx, stopDayClose := context.WithCancel(utils.SetIsAdmin(context.Background(), true))
+	go orderApplication.RunDayClose(dayCloseCtx, time.Now, time.After, func(ctx context.Context) {
+		res, err := orderService.CloseDay(ctx)
+		if err != nil {
+			zap.L().Error("nightly order close failed", zap.Error(err))
+			return
+		}
+		for _, o := range res.Completed {
+			gqlOrder := resolver.ToGQLOrder(o)
+			broker.Publish("orderUpdated", gqlOrder)
+			broker.Publish("orderUpdated:"+o.ID.String(), gqlOrder)
+		}
+		zap.L().Info("nightly order close done", zap.Int("completed", len(res.Completed)))
+		if len(res.UnhandledPending) > 0 {
+			ids := make([]string, len(res.UnhandledPending))
+			for i, id := range res.UnhandledPending {
+				ids[i] = id.String()
+			}
+			zap.L().Warn("nightly order close: PENDING orders never accepted, left open",
+				zap.Int("count", len(ids)), zap.Strings("order_ids", ids))
+		}
+	})
+
 	// Periodically pull hard-bounced / undeliverable recipients from Scaleway TEM
 	// into the suppression list so dispatch() stops emailing them, keeping our
 	// hard-bounce rate down. Runs hourly until shutdown; each run re-scans a wide
@@ -524,6 +552,7 @@ func main() {
 	zap.L().Info("shutting down server")
 	stopPurge()
 	stopSweep()
+	stopDayClose()
 	stopBouncePoll()
 	stopAssistantWatch()
 	stopRouter()
