@@ -666,6 +666,53 @@ func (r *OrderRepository) CancelStaleTestOrders(ctx context.Context, olderThan t
 	return refs, nil
 }
 
+// CompleteInProgressOrders completes every accepted order that is still open:
+// DELIVERED for a delivery, PICKED_UP for a pickup. The status filter in the
+// WHERE clause makes it safe to run on several replicas at once: a row updated by
+// one run no longer matches for the other.
+func (r *OrderRepository) CompleteInProgressOrders(ctx context.Context) ([]*domain.Order, error) {
+	query := `
+		UPDATE orders
+		SET order_status = CASE WHEN order_type = $1 THEN $2 ELSE $3 END,
+		    updated_at = now()
+		WHERE is_test = false
+		  AND order_status IN ($4, $5, $6)
+		RETURNING ` + orderColumns
+	var orders []*domain.Order
+	if err := r.pool.ForContext(ctx).SelectContext(ctx, &orders, query,
+		string(domain.OrderTypeDelivery),
+		string(domain.OrderStatusDelivered),
+		string(domain.OrderStatusPickedUp),
+		string(domain.OrderStatusPreparing),
+		string(domain.OrderStatusAwaitingUp),
+		string(domain.OrderStatusOutForDelivery),
+	); err != nil {
+		return nil, fmt.Errorf("failed to complete in-progress orders: %w", err)
+	}
+	return orders, nil
+}
+
+// FindUnhandledPendingOrderIDs lists the PENDING orders shown to staff that
+// nobody accepted: cash orders, and online orders with a paid payment. Unpaid
+// online orders are left out, Mollie expires them on its own.
+func (r *OrderRepository) FindUnhandledPendingOrderIDs(ctx context.Context) ([]uuid.UUID, error) {
+	const query = `
+		SELECT o.id FROM orders o
+		WHERE o.is_test = false
+		  AND o.order_status = $1
+		  AND (o.is_online_payment = false OR EXISTS (
+			SELECT 1 FROM mollie_payments p
+			WHERE p.order_id = o.id AND p.status = 'paid'
+		  ))
+		ORDER BY o.created_at;
+	`
+	var ids []uuid.UUID
+	if err := r.pool.ForContext(ctx).SelectContext(ctx, &ids, query, string(domain.OrderStatusPending)); err != nil {
+		return nil, fmt.Errorf("failed to query unhandled pending orders: %w", err)
+	}
+	return ids, nil
+}
+
 func (r *OrderRepository) FindStatusHistoryByOrderID(ctx context.Context, orderID uuid.UUID) ([]*domain.OrderStatusHistory, error) {
 	query := `SELECT id, order_id, status, changed_at FROM order_status_history WHERE order_id = $1 ORDER BY changed_at ASC`
 	var history []*domain.OrderStatusHistory

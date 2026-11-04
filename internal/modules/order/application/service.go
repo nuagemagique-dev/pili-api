@@ -38,6 +38,18 @@ type OrderService interface {
 	// CancelStaleTestOrders auto-cancels store-review test orders older than
 	// olderThan and returns how many were cancelled. TEMPORARY (revert after launch).
 	CancelStaleTestOrders(ctx context.Context, olderThan time.Duration) (int, error)
+	// CloseDay runs the nightly close (see DayCloseHour): it completes every
+	// accepted order still open and lists the PENDING orders nobody accepted,
+	// which it leaves as they are (a paid one needs a refund decision).
+	CloseDay(ctx context.Context) (*DayCloseResult, error)
+}
+
+// DayCloseResult is what one nightly close did.
+type DayCloseResult struct {
+	// Completed are the orders moved to DELIVERED or PICKED_UP.
+	Completed []*domain.Order
+	// UnhandledPending are the PENDING orders staff never accepted, left untouched.
+	UnhandledPending []uuid.UUID
 }
 
 const (
@@ -176,6 +188,28 @@ func (s *orderService) CancelStaleTestOrders(ctx context.Context, olderThan time
 		s.rollbackCoupon(ctx, ref.ID, ref.UserID, ref.CouponCode)
 	}
 	return len(refs), nil
+}
+
+func (s *orderService) CloseDay(ctx context.Context) (*DayCloseResult, error) {
+	completed, err := s.repo.CompleteInProgressOrders(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for _, o := range completed {
+		if err := s.repo.InsertStatusHistory(ctx, o.ID, o.OrderStatus); err != nil {
+			logging.FromContext(ctx).Warn("failed to record day-close status history",
+				zap.String("order_id", o.ID.String()), zap.Error(err))
+		}
+	}
+	res := &DayCloseResult{Completed: completed}
+	pending, err := s.repo.FindUnhandledPendingOrderIDs(ctx)
+	if err != nil {
+		// The orders are already completed: report them, and only log the lookup.
+		logging.FromContext(ctx).Warn("failed to list unhandled pending orders at day close", zap.Error(err))
+		return res, nil
+	}
+	res.UnhandledPending = pending
+	return res, nil
 }
 
 func (s *orderService) GetOrderByID(ctx context.Context, orderID uuid.UUID) (*domain.Order, *[]domain.OrderProductRaw, error) {
