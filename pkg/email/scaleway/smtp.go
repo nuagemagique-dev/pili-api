@@ -71,13 +71,20 @@ func buildMimeMessage(req *temv1alpha1.CreateEmailRequest, recipients []string) 
 	var sb strings.Builder
 
 	// From: "Display Name" <addr> when a name is set, otherwise just <addr>.
-	from := req.From.Email
+	// Every header value goes through headerValue: a CR or LF in a subject,
+	// name, address or custom header would otherwise start a new header (or
+	// the body) of the message.
+	from := headerValue(req.From.Email)
 	if req.From.Name != nil && *req.From.Name != "" {
-		from = fmt.Sprintf("%q <%s>", *req.From.Name, req.From.Email)
+		from = fmt.Sprintf("%q <%s>", headerValue(*req.From.Name), from)
+	}
+	safeRecipients := make([]string, len(recipients))
+	for i, r := range recipients {
+		safeRecipients[i] = headerValue(r)
 	}
 	sb.WriteString("From: " + from + "\r\n")
-	sb.WriteString("To: " + strings.Join(recipients, ", ") + "\r\n")
-	sb.WriteString("Subject: " + encodeMimeHeader(req.Subject) + "\r\n")
+	sb.WriteString("To: " + strings.Join(safeRecipients, ", ") + "\r\n")
+	sb.WriteString("Subject: " + encodeMimeHeader(headerValue(req.Subject)) + "\r\n")
 	sb.WriteString("MIME-Version: 1.0\r\n")
 
 	// Pass-through custom headers (e.g. orderThreadHeaders Message-ID / References).
@@ -85,7 +92,7 @@ func buildMimeMessage(req *temv1alpha1.CreateEmailRequest, recipients []string) 
 		if h == nil || h.Key == "" {
 			continue
 		}
-		sb.WriteString(h.Key + ": " + h.Value + "\r\n")
+		sb.WriteString(headerValue(h.Key) + ": " + headerValue(h.Value) + "\r\n")
 	}
 
 	sb.WriteString("Content-Type: multipart/alternative; boundary=\"" + boundary + "\"\r\n")
@@ -115,6 +122,14 @@ func mimeBoundary() (string, error) {
 		return "", fmt.Errorf("mime boundary: %w", err)
 	}
 	return "tsb_" + hex.EncodeToString(b[:]), nil
+}
+
+// headerLineBreaks drops the characters that end a header line.
+var headerLineBreaks = strings.NewReplacer("\r", "", "\n", "")
+
+// headerValue strips CR and LF so a value cannot inject headers or a body.
+func headerValue(s string) string {
+	return headerLineBreaks.Replace(s)
 }
 
 // encodeMimeHeader returns an RFC 2047 encoded-word for any header value

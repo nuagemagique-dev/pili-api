@@ -204,6 +204,24 @@ func TestBuildMimeMessage(t *testing.T) {
 		require.Contains(t, raw, "Subject: Order confirmed\r\n")
 	})
 
+	t.Run("CR and LF in header values cannot inject headers", func(t *testing.T) {
+		req := baseSMTPReq()
+		name := "Tokyo\r\nBcc: victim@x.test"
+		req.From = addr("noreply@tsb.test\r\nX-Evil: 1")
+		req.From.Name = &name
+		req.Subject = "Hi\r\nBcc: victim@x.test"
+		req.AdditionalHeaders = []*temv1alpha1.CreateEmailRequestHeader{
+			{Key: "X-Ref\nX-Evil", Value: "<m@x>\r\n\r\nbody"},
+		}
+		raw, err := buildMimeMessage(req, []string{"to@example.com\r\nBcc: victim@x.test"})
+		require.NoError(t, err)
+		m := smtptest.Parse(t, raw)
+		require.Empty(t, m.Header.Get("Bcc"))
+		require.Empty(t, m.Header.Get("X-Evil"))
+		require.Equal(t, "HiBcc: victim@x.test", m.Subject)
+		require.Contains(t, string(raw), "To: to@example.comBcc: victim@x.test\r\n")
+	})
+
 	t.Run("each message gets a fresh boundary", func(t *testing.T) {
 		a, _ := build(t, baseSMTPReq())
 		b, _ := build(t, baseSMTPReq())

@@ -73,6 +73,7 @@ func TestAuthorizeProxyHandler_RejectsOtherTargets(t *testing.T) {
 		"metadata ip":    "http://169.254.169.254/latest/meta-data/",
 		"opaque scheme":  "mailto:someone@example.com",
 		"host lookalike": "http://" + issuerHost + ".evil.test/oauth/v2/authorize",
+		"bad query":      srv.URL + "/oauth/v2/authorize?client_id=%zz",
 	}
 	for name, target := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -105,4 +106,22 @@ func TestAuthorizeProxyHandler_InternalURLKeepsIssuerHost(t *testing.T) {
 	w = postAuthorizeProxy(t, "https://attacker.test/debug/pprof?x=1")
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 	assert.Equal(t, int32(1), hits.Load())
+}
+
+func TestAuthorizeProxyHandler_ForwardsOnlyTheQuery(t *testing.T) {
+	var gotURI atomic.Value
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotURI.Store(r.URL.RequestURI())
+		w.Header().Set("Location", "/ui/v2/login/login?authRequest=V2_123")
+		w.WriteHeader(http.StatusFound)
+	}))
+	t.Cleanup(srv.Close)
+	Init(Config{ZitadelIssuer: srv.URL, ZitadelClientID: "test-client-id", ServicePAT: "test-pat"})
+
+	w := postAuthorizeProxy(t, srv.URL+"/oauth/v2/authorize?scope=openid+email&client_id=test-client-id")
+
+	require.Equal(t, http.StatusOK, w.Code)
+	// The path comes from configuration; the query is re-encoded from the
+	// caller's parameters (sorted by key).
+	assert.Equal(t, authorizePath+"?client_id=test-client-id&scope=openid+email", gotURI.Load())
 }

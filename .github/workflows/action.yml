@@ -18,6 +18,12 @@ on:
         default: '0'
         type: string
 
+# The GITHUB_TOKEN only checks out code: registry pushes use secrets.PAT and
+# deploys use SSH. Jobs that need more (smoke_production dispatches a rollback)
+# grant it themselves.
+permissions:
+  contents: read
+
 env:
   DOCKER_REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository_owner }}/pili-api

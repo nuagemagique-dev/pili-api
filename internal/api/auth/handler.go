@@ -142,24 +142,27 @@ func AuthorizeProxyHandler(c *gin.Context) {
 
 	// Only the issuer's own authorize endpoint may be proxied. Without this
 	// check the handler is an unauthenticated server-side GET to any URL.
-	target, err := validateAuthorizeURL(req.AuthorizeURL)
+	query, err := validateAuthorizeURL(req.AuthorizeURL)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_authorize_url"})
 		return
 	}
 
-	// Rewrite the authorize URL to use the internal Zitadel address (if configured)
-	// to avoid Cloudflare Tunnel hairpin (public domain → Cloudflare → Tunnel → same server → 502).
-	// Keep the issuer host for the Host header (Zitadel uses virtual hosting).
+	// The fetched URL is built from configuration only; the caller supplies
+	// nothing but the query string. Use the internal Zitadel address when one
+	// is configured, to avoid the Cloudflare Tunnel hairpin (public domain,
+	// Cloudflare, Tunnel, same server, 502), and keep the issuer host for the
+	// Host header (Zitadel uses virtual hosting).
+	issuer, _ := url.Parse(strings.TrimRight(client.issuerURL, "/")) // parsed in validateAuthorizeURL
+	base := issuer.Scheme + "://" + issuer.Host
 	var originalHost string
 	if client.externalHost != "" {
 		if internal, err2 := url.Parse(client.baseURL); err2 == nil {
-			originalHost = target.Host
-			target.Scheme = internal.Scheme
-			target.Host = internal.Host
+			originalHost = issuer.Host
+			base = internal.Scheme + "://" + internal.Host
 		}
 	}
-	req.AuthorizeURL = target.String()
+	req.AuthorizeURL = base + issuer.Path + authorizePath + "?" + query
 
 	// Follow the redirect chain to capture the authRequestID from the Location header
 	var redirectURL string
@@ -222,24 +225,29 @@ const authorizePath = "/oauth/v2/authorize"
 var errInvalidAuthorizeURL = errors.New("authorize URL is not the issuer authorize endpoint")
 
 // validateAuthorizeURL accepts only {issuer}/oauth/v2/authorize?... and
-// returns the parsed URL. Scheme and host must match the configured issuer;
-// userinfo and fragments are rejected.
-func validateAuthorizeURL(raw string) (*url.URL, error) {
+// returns its re-encoded query string, the only part the caller controls.
+// Scheme and host must match the configured issuer; userinfo and fragments
+// are rejected.
+func validateAuthorizeURL(raw string) (string, error) {
 	u, err := url.Parse(raw)
 	if err != nil {
-		return nil, errInvalidAuthorizeURL
+		return "", errInvalidAuthorizeURL
 	}
 	issuer, err := url.Parse(strings.TrimRight(client.issuerURL, "/"))
 	if err != nil || issuer.Host == "" {
-		return nil, errInvalidAuthorizeURL
+		return "", errInvalidAuthorizeURL
 	}
 	if u.User != nil || u.Fragment != "" || u.Opaque != "" ||
 		!strings.EqualFold(u.Scheme, issuer.Scheme) ||
 		!strings.EqualFold(u.Host, issuer.Host) ||
 		u.Path != issuer.Path+authorizePath {
-		return nil, errInvalidAuthorizeURL
+		return "", errInvalidAuthorizeURL
 	}
-	return u, nil
+	query, err := url.ParseQuery(u.RawQuery)
+	if err != nil {
+		return "", errInvalidAuthorizeURL
+	}
+	return query.Encode(), nil
 }
 
 // POST /auth/token-exchange
