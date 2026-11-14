@@ -2,12 +2,16 @@ package feedback
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/url"
 	"os"
+	"slices"
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/gin-gonic/gin/binding"
+	"github.com/go-playground/validator/v10"
 	"go.uber.org/zap"
 
 	"tsb-service/pkg/email/scaleway"
@@ -53,12 +57,47 @@ func verifyTurnstile(token, remoteIP string) bool {
 	return result.Success
 }
 
+// jsonFieldNames maps the request's Go fields to the JSON keys the form sends, so the client can
+// mark the right input when the server refuses a value it accepted (an email such as "a@b").
+var jsonFieldNames = map[string]string{
+	"Name":         "name",
+	"Email":        "email",
+	"ServiceType":  "serviceType",
+	"FeedbackType": "feedbackType",
+	"Message":      "message",
+}
+
+// invalidFields lists the JSON names of the fields that failed validation, in struct order.
+func invalidFields(err error) []string {
+	fields := []string{}
+	var verrs validator.ValidationErrors
+	if !errors.As(err, &verrs) {
+		return fields
+	}
+	for _, fe := range verrs {
+		if name, ok := jsonFieldNames[fe.StructField()]; ok && !slices.Contains(fields, name) {
+			fields = append(fields, name)
+		}
+	}
+	return fields
+}
+
 func HandleFeedback(c *gin.Context) {
 	log := logging.FromContext(c.Request.Context())
 
+	// Decode first and validate after trimming, so whitespace-only values fail "required" and
+	// "min" instead of slipping through and arriving empty in the owner's inbox.
 	var req FeedbackRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := json.NewDecoder(c.Request.Body).Decode(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_input"})
+		return
+	}
+	req.Name = strings.TrimSpace(req.Name)
+	req.Email = strings.TrimSpace(req.Email)
+	req.Message = strings.TrimSpace(req.Message)
+
+	if err := binding.Validator.ValidateStruct(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_input", "fields": invalidFields(err)})
 		return
 	}
 
@@ -76,16 +115,11 @@ func HandleFeedback(c *gin.Context) {
 		return
 	}
 
-	// Sanitize inputs
-	req.Name = strings.TrimSpace(req.Name)
-	req.Email = strings.TrimSpace(req.Email)
-	req.Message = strings.TrimSpace(req.Message)
-
 	// Extract language from context
 	lang := utils.GetLang(c.Request.Context())
 
 	if err := scaleway.SendFeedbackEmail(req.Name, req.Email, req.ServiceType, req.FeedbackType, req.Message, lang); err != nil {
-		log.Error("failed to send feedback email", zap.Error(err))
+		log.Error("failed to send feedback email", zap.Error(err), zap.Bool("recipient_set", scaleway.FeedbackRecipient() != ""))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "email_failed"})
 		return
 	}

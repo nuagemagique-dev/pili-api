@@ -1,11 +1,13 @@
 package scaleway
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"github.com/scaleway/scaleway-sdk-go/logger"
 	"os"
 	"slices"
+	"strings"
 	"time"
 	addressDomain "tsb-service/internal/modules/address/domain"
 	orderDomain "tsb-service/internal/modules/order/domain"
@@ -834,17 +836,31 @@ func SendReadyTimeUpdatedEmail(user userDomain.User, lang string, order orderDom
 	return nil
 }
 
+// ErrNoFeedbackRecipient: neither FEEDBACK_RECIPIENT_EMAIL nor the restaurant's own address
+// (RESTAURANT_EMAIL) is set, so the feedback has nowhere to go.
+var ErrNoFeedbackRecipient = errors.New("no feedback recipient configured")
+
+// FeedbackRecipient is the inbox that receives the contact form: FEEDBACK_RECIPIENT_EMAIL when
+// set, otherwise the restaurant's own address, so every brand gets its feedback without extra config.
+func FeedbackRecipient() string {
+	return cmp.Or(strings.TrimSpace(os.Getenv("FEEDBACK_RECIPIENT_EMAIL")), strings.TrimSpace(brandCfg().Email))
+}
+
 func SendFeedbackEmail(name, email, serviceType, feedbackType, message, lang string) error {
+	recipient := FeedbackRecipient()
+	if recipient == "" {
+		return ErrNoFeedbackRecipient
+	}
+
 	newReq, err := copyBaseReq()
 	if err != nil {
 		return err
 	}
 
-	adminEmail := os.Getenv("FEEDBACK_RECIPIENT_EMAIL")
 	adminName := brandCfg().Name + " Admin"
 	newReq.To = []*temv1alpha1.CreateEmailRequestAddress{
 		{
-			Email: adminEmail,
+			Email: recipient,
 			Name:  &adminName,
 		},
 	}
@@ -864,8 +880,19 @@ func SendFeedbackEmail(name, email, serviceType, feedbackType, message, lang str
 	newReq.Subject = fmt.Sprintf("Customer feedback (%s) - %s", feedbackType, name)
 	newReq.HTML = htmlContent
 	newReq.Text = plainTextContent
+	// Staff answer the customer with a plain "Reply" instead of copying the address from the body.
+	newReq.AdditionalHeaders = append(newReq.AdditionalHeaders, &temv1alpha1.CreateEmailRequestHeader{Key: "Reply-To", Value: email})
 
 	err = dispatch(&newReq)
+	var invalid *scw.InvalidArgumentsError
+	if err != nil && !errors.Is(err, ErrInvalidRecipient) && errors.As(err, &invalid) {
+		// Losing the feedback is worse than losing the Reply-To: if TEM refuses the request for
+		// any other argument, send it once more without the extra header.
+		newReq.AdditionalHeaders = slices.DeleteFunc(newReq.AdditionalHeaders, func(h *temv1alpha1.CreateEmailRequestHeader) bool {
+			return h != nil && h.Key == "Reply-To"
+		})
+		err = dispatch(&newReq)
+	}
 	if err != nil {
 		return fmt.Errorf("failed to send email: %w", err)
 	}
