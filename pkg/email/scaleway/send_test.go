@@ -572,6 +572,7 @@ func TestFeedbackEmail(t *testing.T) {
 	require.Contains(t, m.HTML, "Cold sushi &amp; late")
 	require.NotContains(t, m.HTML, "<script>", "customer-supplied markup is escaped")
 	require.Empty(t, m.Header.Get("References"), "feedback is not part of an order thread")
+	require.Equal(t, "marc@example.com", m.Header.Get("Reply-To"), "staff answer the customer with a plain Reply")
 }
 
 func TestAssistantBotProblemEmail(t *testing.T) {

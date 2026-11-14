@@ -9,6 +9,7 @@ import (
 	"sync"
 	"testing"
 
+	"tsb-service/pkg/brand"
 	"tsb-service/pkg/email/scaleway/scalewaytest"
 	"tsb-service/pkg/email/smtptest"
 
@@ -73,23 +74,29 @@ func post(t *testing.T, body string, lang string) *httptest.ResponseRecorder {
 
 func TestHandleFeedback_Validation(t *testing.T) {
 	t.Setenv("TURNSTILE_SECRET_KEY", "")
-	cases := map[string]string{
-		"not json":              `{`,
-		"missing everything":    `{}`,
-		"short message":         `{"name":"A","email":"a@b.co","serviceType":"takeaway","feedbackType":"complaint","message":"too short"}`,
-		"message over 2000":     `{"name":"A","email":"a@b.co","serviceType":"takeaway","feedbackType":"complaint","message":"` + strings.Repeat("x", 2001) + `"}`,
-		"invalid email":         `{"name":"A","email":"nope","serviceType":"takeaway","feedbackType":"complaint","message":"long enough message"}`,
-		"unknown service type":  `{"name":"A","email":"a@b.co","serviceType":"drive-through","feedbackType":"complaint","message":"long enough message"}`,
-		"unknown feedback type": `{"name":"A","email":"a@b.co","serviceType":"takeaway","feedbackType":"praise","message":"long enough message"}`,
-		"name over 100 chars":   `{"name":"` + strings.Repeat("n", 101) + `","email":"a@b.co","serviceType":"takeaway","feedbackType":"complaint","message":"long enough message"}`,
-		"email over 255 chars":  `{"name":"A","email":"` + strings.Repeat("e", 251) + `@b.co","serviceType":"takeaway","feedbackType":"complaint","message":"long enough message"}`,
-		"missing service type":  `{"name":"A","email":"a@b.co","feedbackType":"complaint","message":"long enough message"}`,
+	cases := map[string]struct{ body, want string }{
+		"not json":                        {`{`, `{"error":"invalid_input"}`},
+		"missing everything":              {`{}`, `{"error":"invalid_input","fields":["name","email","serviceType","feedbackType","message"]}`},
+		"short message":                   {`{"name":"A","email":"a@b.co","serviceType":"takeaway","feedbackType":"complaint","message":"too short"}`, `{"error":"invalid_input","fields":["message"]}`},
+		"message over 2000":               {`{"name":"A","email":"a@b.co","serviceType":"takeaway","feedbackType":"complaint","message":"` + strings.Repeat("x", 2001) + `"}`, `{"error":"invalid_input","fields":["message"]}`},
+		"invalid email":                   {`{"name":"A","email":"nope","serviceType":"takeaway","feedbackType":"complaint","message":"long enough message"}`, `{"error":"invalid_input","fields":["email"]}`},
+		"email without a dot":             {`{"name":"A","email":"a@b","serviceType":"takeaway","feedbackType":"complaint","message":"long enough message"}`, `{"error":"invalid_input","fields":["email"]}`},
+		"unknown service type":            {`{"name":"A","email":"a@b.co","serviceType":"drive-through","feedbackType":"complaint","message":"long enough message"}`, `{"error":"invalid_input","fields":["serviceType"]}`},
+		"unknown feedback type":           {`{"name":"A","email":"a@b.co","serviceType":"takeaway","feedbackType":"praise","message":"long enough message"}`, `{"error":"invalid_input","fields":["feedbackType"]}`},
+		"name over 100 chars":             {`{"name":"` + strings.Repeat("n", 101) + `","email":"a@b.co","serviceType":"takeaway","feedbackType":"complaint","message":"long enough message"}`, `{"error":"invalid_input","fields":["name"]}`},
+		"email over 255 chars":            {`{"name":"A","email":"` + strings.Repeat("e", 251) + `@b.co","serviceType":"takeaway","feedbackType":"complaint","message":"long enough message"}`, `{"error":"invalid_input","fields":["email"]}`},
+		"missing service type":            {`{"name":"A","email":"a@b.co","feedbackType":"complaint","message":"long enough message"}`, `{"error":"invalid_input","fields":["serviceType"]}`},
+		"whitespace-only name":            {`{"name":"   ","email":"a@b.co","serviceType":"takeaway","feedbackType":"complaint","message":"long enough message"}`, `{"error":"invalid_input","fields":["name"]}`},
+		"whitespace-padded short message": {`{"name":"A","email":"a@b.co","serviceType":"takeaway","feedbackType":"complaint","message":"   short          "}`, `{"error":"invalid_input","fields":["message"]}`},
+		"whitespace-only message":         {`{"name":"A","email":"a@b.co","serviceType":"takeaway","feedbackType":"complaint","message":"            "}`, `{"error":"invalid_input","fields":["message"]}`},
 	}
-	for name, body := range cases {
+	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			rec := post(t, body, "")
+			sink := startSMTPSink(t)
+			rec := post(t, tc.body, "")
 			assert.Equal(t, http.StatusBadRequest, rec.Code)
-			assert.JSONEq(t, `{"error":"invalid_input"}`, rec.Body.String())
+			assert.JSONEq(t, tc.want, rec.Body.String())
+			assert.Empty(t, sink.Messages())
 		})
 	}
 }
@@ -190,4 +197,19 @@ func TestHandleFeedback_EmailFailure(t *testing.T) {
 
 	assert.Equal(t, http.StatusInternalServerError, rec.Code)
 	assert.JSONEq(t, `{"error":"email_failed"}`, rec.Body.String())
+}
+
+func TestHandleFeedback_FallsBackToTheRestaurantAddress(t *testing.T) {
+	t.Setenv("TURNSTILE_SECRET_KEY", "")
+	t.Cleanup(func() { brand.Load() })
+	t.Setenv("RESTAURANT_EMAIL", "resto@example.test")
+	brand.Load()
+	t.Setenv("FEEDBACK_RECIPIENT_EMAIL", "")
+	sink := startSMTPSink(t)
+
+	rec := post(t, validBody, "")
+
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	require.Len(t, sink.Messages(), 1)
+	assert.Equal(t, []string{"resto@example.test"}, sink.Messages()[0].To)
 }
