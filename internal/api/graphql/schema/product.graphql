@@ -4,6 +4,9 @@ type Product {
     code: String
     createdAt: DateTime!
     id: ID!
+    # When the image was last stored, null if never. Append it to the image URL (?v=)
+    # so a replaced image is not served from a browser or CDN cache.
+    imageUpdatedAt: DateTime
     isAvailable: Boolean!
     isDiscountable: Boolean!
     isHalal: Boolean!

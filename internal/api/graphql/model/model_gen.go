@@ -445,6 +445,7 @@ type Product struct {
 	Code           *string               `json:"code,omitempty"`
 	CreatedAt      time.Time             `json:"createdAt"`
 	ID             uuid.UUID             `json:"id"`
+	ImageUpdatedAt *time.Time            `json:"imageUpdatedAt,omitempty"`
 	IsAvailable    bool                  `json:"isAvailable"`
 	IsDiscountable bool                  `json:"isDiscountable"`
 	IsHalal        bool                  `json:"isHalal"`

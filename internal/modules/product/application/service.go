@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"github.com/shopspring/decimal"
+	"time"
 	"tsb-service/internal/modules/product/domain"
 
 	"github.com/google/uuid"
@@ -24,6 +25,8 @@ type ProductService interface {
 	GetCategory(ctx context.Context, id uuid.UUID) (*domain.Category, error)
 	GetCategoryBySlug(ctx context.Context, slug string) (*domain.Category, error)
 	UpdateProduct(ctx context.Context, product *domain.Product) error
+	// MarkProductImageUpdated records that the product's image was just stored and returns the time.
+	MarkProductImageUpdated(ctx context.Context, id uuid.UUID) (time.Time, error)
 
 	BatchGetCategoriesByProductIDs(ctx context.Context, productIDs []string) (map[string][]*domain.Category, error)
 	BatchGetProductsByCategory(ctx context.Context, categoryIDs []string) (map[string][]*domain.Product, error)
@@ -100,6 +103,10 @@ func (s *productService) CreateProduct(
 // UpdateProduct updates an existing product.
 func (s *productService) UpdateProduct(ctx context.Context, product *domain.Product) error {
 	return s.repo.Update(ctx, product)
+}
+
+func (s *productService) MarkProductImageUpdated(ctx context.Context, id uuid.UUID) (time.Time, error) {
+	return s.repo.MarkImageUpdated(ctx, id)
 }
 
 // GetProduct retrieves a product by its unique identifier.

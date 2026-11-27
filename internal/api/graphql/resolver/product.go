@@ -65,6 +65,8 @@ func (r *mutationResolver) CreateProduct(ctx context.Context, input model.Create
 		removeBg := input.RemoveBackground != nil && *input.RemoveBackground
 		if err := utils.UploadProductImage(ctx, input.Image.File, input.Image.Filename, prod.ID.String(), removeBg); err != nil {
 			logging.FromContext(ctx).Error("image upload failed", zap.String("product_id", prod.ID.String()), zap.Error(err))
+		} else {
+			r.markImageUpdated(ctx, prod)
 		}
 	}
 
@@ -157,6 +159,8 @@ func (r *mutationResolver) UpdateProduct(ctx context.Context, id uuid.UUID, inpu
 			removeBg,
 		); err != nil {
 			logging.FromContext(ctx).Error("image upload failed", zap.String("product_id", id.String()), zap.Error(err))
+		} else {
+			r.markImageUpdated(ctx, prod)
 		}
 	}
 

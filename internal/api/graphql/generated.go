@@ -379,6 +379,7 @@ type ComplexityRoot struct {
 		CreatedAt      func(childComplexity int) int
 		Description    func(childComplexity int) int
 		ID             func(childComplexity int) int
+		ImageUpdatedAt func(childComplexity int) int
 		IsAvailable    func(childComplexity int) int
 		IsDiscountable func(childComplexity int) int
 		IsHalal        func(childComplexity int) int
@@ -2235,6 +2236,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Product.ID(childComplexity), true
+	case "Product.imageUpdatedAt":
+		if e.ComplexityRoot.Product.ImageUpdatedAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Product.ImageUpdatedAt(childComplexity), true
 	case "Product.isAvailable":
 		if e.ComplexityRoot.Product.IsAvailable == nil {
 			break
@@ -3691,6 +3698,8 @@ func (ec *executionContext) childFields_Product(ctx context.Context, field graph
 		return ec.fieldContext_Product_createdAt(ctx, field)
 	case "id":
 		return ec.fieldContext_Product_id(ctx, field)
+	case "imageUpdatedAt":
+		return ec.fieldContext_Product_imageUpdatedAt(ctx, field)
 	case "isAvailable":
 		return ec.fieldContext_Product_isAvailable(ctx, field)
 	case "isDiscountable":
@@ -11359,6 +11368,29 @@ func (ec *executionContext) _Product_id(ctx context.Context, field graphql.Colle
 }
 func (ec *executionContext) fieldContext_Product_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	return graphql.NewScalarFieldContext("Product", field, false, false, "ID")
+}
+
+func (ec *executionContext) _Product_imageUpdatedAt(ctx context.Context, field graphql.CollectedField, obj *model.Product) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Product_imageUpdatedAt(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ImageUpdatedAt, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *time.Time) graphql.Marshaler {
+			return ec.marshalODateTime2ᚖtimeᚐTime(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_Product_imageUpdatedAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Product", field, false, false, "DateTime")
 }
 
 func (ec *executionContext) _Product_isAvailable(ctx context.Context, field graphql.CollectedField, obj *model.Product) (ret graphql.Marshaler) {
@@ -19769,6 +19801,11 @@ func (ec *executionContext) _Product(ctx context.Context, sel ast.SelectionSet, 
 		case "id":
 			out.Values[i] = ec._Product_id(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "imageUpdatedAt":
+			out.Values[i] = ec._Product_imageUpdatedAt(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
 				atomic.AddUint32(&out.Invalids, 1)
 			}
 		case "isAvailable":
