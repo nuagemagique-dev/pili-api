@@ -2,6 +2,8 @@ package domain
 
 import (
 	"context"
+	"time"
+
 	"github.com/google/uuid"
 )
 
@@ -9,6 +11,8 @@ import (
 type ProductRepository interface {
 	Create(ctx context.Context, product *Product) error
 	Update(ctx context.Context, product *Product) error
+	// MarkImageUpdated records that the product's image was just stored and returns the time.
+	MarkImageUpdated(ctx context.Context, id uuid.UUID) (time.Time, error)
 	FindByID(ctx context.Context, id uuid.UUID) (*Product, error)
 	FindAll(ctx context.Context) ([]*Product, error)
 	FindByCategoryID(ctx context.Context, categoryID string) ([]*Product, error)

@@ -100,6 +100,7 @@ func ToGQLProduct(p *productDomain.Product, lang string) *model.Product {
 	return &model.Product{
 		ID:             p.ID,
 		CreatedAt:      p.CreatedAt,
+		ImageUpdatedAt: p.ImageUpdatedAt,
 		Price:          p.Price.String(),
 		Code:           p.Code,
 		Slug:           *p.Slug,

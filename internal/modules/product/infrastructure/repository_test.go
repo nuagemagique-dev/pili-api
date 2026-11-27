@@ -3,6 +3,7 @@ package infrastructure
 import (
 	"database/sql"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/lib/pq"
@@ -683,4 +684,37 @@ func TestProductRepositoryClosedConnection(t *testing.T) {
 	assert.Error(t, repo.CreateChoice(ctx, &domain.ProductChoice{}))
 	assert.Error(t, repo.UpdateChoice(ctx, &domain.ProductChoice{}))
 	assert.Error(t, repo.DeleteChoice(ctx, id))
+}
+
+func TestProductRepositoryImageUpdatedAt(t *testing.T) {
+	e := newEnv(t)
+	ctx := t.Context()
+	cat := testhelpers.SeedCategory(t, e.tdb.DB, 1, map[string]string{"fr": "Plateaux"})
+	p := e.newProduct(t, cat, nil)
+
+	got, err := e.repo.FindByID(ctx, p.ID)
+	require.NoError(t, err)
+	assert.Nil(t, got.ImageUpdatedAt, "a new product has no image version")
+
+	before := time.Now().Add(-time.Minute)
+	marked, err := e.repo.MarkImageUpdated(ctx, p.ID)
+	require.NoError(t, err)
+	assert.True(t, marked.After(before), "marked at %v", marked)
+
+	got, err = e.repo.FindByID(ctx, p.ID)
+	require.NoError(t, err)
+	require.NotNil(t, got.ImageUpdatedAt)
+	assert.True(t, got.ImageUpdatedAt.Equal(marked))
+
+	all, err := e.repo.FindAll(ctx)
+	require.NoError(t, err)
+	for _, listed := range all {
+		if listed.ID == p.ID {
+			require.NotNil(t, listed.ImageUpdatedAt, "FindAll returns the version")
+			assert.True(t, listed.ImageUpdatedAt.Equal(marked))
+		}
+	}
+
+	_, err = e.repo.MarkImageUpdated(ctx, uuid.New())
+	assert.ErrorIs(t, err, sql.ErrNoRows, "an unknown product is an error")
 }

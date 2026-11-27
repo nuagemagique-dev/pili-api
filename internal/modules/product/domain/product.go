@@ -26,7 +26,10 @@ type Product struct {
 	CategoryID     uuid.UUID       `db:"category_id" json:"categoryId"`
 	CreatedAt      time.Time       `db:"created_at" json:"createdAt"`
 	UpdatedAt      time.Time       `db:"updated_at" json:"updatedAt"`
-	Translations   []Translation   `json:"translations"`
+	// ImageUpdatedAt is when the image was last stored, nil when it never was. Clients use it
+	// to version the image URL, since a new upload replaces the file under the same key.
+	ImageUpdatedAt *time.Time    `db:"image_updated_at" json:"imageUpdatedAt"`
+	Translations   []Translation `json:"translations"`
 }
 
 // ProductChoice represents a selectable option for a product.

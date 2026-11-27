@@ -582,6 +582,7 @@ type Product {
   code: String
   createdAt: DateTime!
   id: ID!
+  imageUpdatedAt: DateTime
   isAvailable: Boolean!
   isDiscountable: Boolean!
   isHalal: Boolean!

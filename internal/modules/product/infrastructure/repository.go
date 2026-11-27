@@ -141,6 +141,16 @@ func productWriteError(action string, err error) error {
 }
 
 // Update modifies a product and its translations.
+// MarkImageUpdated sets image_updated_at to now and returns it.
+func (r *ProductRepository) MarkImageUpdated(ctx context.Context, id uuid.UUID) (time.Time, error) {
+	var updatedAt time.Time
+	err := r.pool.ForContext(ctx).QueryRowContext(ctx,
+		`UPDATE products SET image_updated_at = now() WHERE id = $1 RETURNING image_updated_at`,
+		id,
+	).Scan(&updatedAt)
+	return updatedAt, err
+}
+
 func (r *ProductRepository) Update(ctx context.Context, product *domain.Product) error {
 	// Begin a transaction.
 	tx, err := r.pool.ForContext(ctx).BeginTx(ctx, nil)
@@ -275,6 +285,7 @@ func (r *ProductRepository) FindByID(ctx context.Context, id uuid.UUID) (*domain
             p.category_id,
             p.created_at,
             p.updated_at,
+            p.image_updated_at,
             t.language,
             t.name,
             t.description
@@ -312,6 +323,7 @@ func (r *ProductRepository) FindAll(ctx context.Context) ([]*domain.Product, err
             p.category_id,
             p.created_at,
             p.updated_at,
+            p.image_updated_at,
             t.language,
             t.name,
             t.description
@@ -458,6 +470,7 @@ func (r *ProductRepository) FindByCategoryID(ctx context.Context, categoryID str
             p.category_id,
             p.created_at,
             p.updated_at,
+            p.image_updated_at,
             t.language,
             t.name,
             t.description
@@ -663,6 +676,7 @@ func (r *ProductRepository) queryProducts(ctx context.Context, query string, arg
 		CategoryID       string          `db:"category_id"`
 		CreatedAt        time.Time       `db:"created_at"`
 		UpdatedAt        time.Time       `db:"updated_at"`
+		ImageUpdatedAt   *time.Time      `db:"image_updated_at"`
 		Language         *string         `db:"language"`
 		TransName        *string         `db:"name"`
 		TransDescription *string         `db:"description"`
@@ -701,6 +715,7 @@ func (r *ProductRepository) queryProducts(ctx context.Context, query string, arg
 				CategoryID:     categoryID,
 				CreatedAt:      row.CreatedAt,
 				UpdatedAt:      row.UpdatedAt,
+				ImageUpdatedAt: row.ImageUpdatedAt,
 				Translations:   []domain.Translation{},
 			}
 			// Check if available.
@@ -910,6 +925,7 @@ func (r *ProductRepository) FindByCategoryIDs(ctx context.Context, categoryIDs [
             p.category_id,
             p.created_at,
             p.updated_at,
+            p.image_updated_at,
             t.language,
             t.name,
             t.description
@@ -959,6 +975,7 @@ func (r *ProductRepository) BatchGetProductByIDs(ctx context.Context, productIDs
             p.category_id,
             p.created_at,
             p.updated_at,
+            p.image_updated_at,
             t.language,
             t.name,
             t.description

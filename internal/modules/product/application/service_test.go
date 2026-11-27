@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
@@ -40,6 +41,12 @@ func (r *stubRepo) Create(_ context.Context, p *domain.Product) error {
 	r.created = p
 	return r.err
 }
+func (r *stubRepo) MarkImageUpdated(_ context.Context, id uuid.UUID) (time.Time, error) {
+	r.rec("MarkImageUpdated")
+	r.ids = append(r.ids, id.String())
+	return time.Date(2026, 11, 27, 10, 0, 0, 0, time.UTC), r.err
+}
+
 func (r *stubRepo) Update(_ context.Context, p *domain.Product) error {
 	r.rec("Update")
 	r.created = p
@@ -389,5 +396,24 @@ func TestProductDataLoaders(t *testing.T) {
 		require.ErrorContains(t, err, "failed to fetch categories")
 		_, err = GetChoiceByIDLoader(failing).Loader.Load(failing, "c")
 		require.ErrorContains(t, err, "failed to fetch product choices")
+	})
+}
+
+func TestMarkProductImageUpdated(t *testing.T) {
+	id := uuid.New()
+
+	t.Run("delegates to the repository and returns its time", func(t *testing.T) {
+		repo := &stubRepo{}
+		got, err := NewProductService(repo).MarkProductImageUpdated(t.Context(), id)
+		require.NoError(t, err)
+		assert.Equal(t, time.Date(2026, 11, 27, 10, 0, 0, 0, time.UTC), got)
+		assert.Equal(t, []string{"MarkImageUpdated"}, repo.calls)
+		assert.Equal(t, []string{id.String()}, repo.ids)
+	})
+
+	t.Run("passes a repository error through", func(t *testing.T) {
+		repo := &stubRepo{err: errors.New("db down")}
+		_, err := NewProductService(repo).MarkProductImageUpdated(t.Context(), id)
+		require.EqualError(t, err, "db down")
 	})
 }

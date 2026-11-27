@@ -102,6 +102,7 @@ func TestProductAdministration(t *testing.T) {
 		require.NotNil(t, got.PieceCount)
 		assert.Equal(t, 8, *got.PieceCount)
 		assert.Empty(t, files.uploads(), "no image, no upload")
+		assert.Nil(t, got.ImageUpdatedAt, "no image, no image version")
 
 		fr, err := r.Query().Product(env.ctxFor("", false, "fr"), got.ID)
 		require.NoError(t, err)
@@ -115,6 +116,11 @@ func TestProductAdministration(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, files.uploads(), 1)
 		assert.Equal(t, fileUpload{Path: "/upload", Slug: got.ID.String(), Filename: "dragon.png", Content: "PNGDATA"}, files.uploads()[0])
+		require.NotNil(t, got.ImageUpdatedAt, "a stored image gets a version")
+		read, err := r.Query().Product(ctx, got.ID)
+		require.NoError(t, err)
+		require.NotNil(t, read.ImageUpdatedAt)
+		assert.True(t, read.ImageUpdatedAt.Equal(*got.ImageUpdatedAt), "the version is persisted")
 
 		in = baseInput()
 		in.Image, in.RemoveBackground = upload("cut.png", "CUT"), new(true)
@@ -135,6 +141,7 @@ func TestProductAdministration(t *testing.T) {
 		got, err := r.Mutation().CreateProduct(ctx, in)
 		require.NoError(t, err)
 		assert.NotEqual(t, uuid.Nil, got.ID)
+		assert.Nil(t, got.ImageUpdatedAt, "no stored image, no version")
 	})
 
 	t.Run("createProduct refuses what cannot be stored", func(t *testing.T) {
@@ -221,8 +228,11 @@ func TestProductAdministration(t *testing.T) {
 
 	t.Run("updateProduct replaces the image under the immutable product id", func(t *testing.T) {
 		before := len(files.uploads())
-		_, err := r.Mutation().UpdateProduct(ctx, created.ID, model.UpdateProductInput{Image: upload("v2.png", "V2"), RemoveBackground: new(true)})
+		start := time.Now().Add(-time.Minute)
+		v2, err := r.Mutation().UpdateProduct(ctx, created.ID, model.UpdateProductInput{Image: upload("v2.png", "V2"), RemoveBackground: new(true)})
 		require.NoError(t, err)
+		require.NotNil(t, v2.ImageUpdatedAt, "a replaced image gets a new version")
+		assert.True(t, v2.ImageUpdatedAt.After(start))
 		ups := files.uploads()
 		require.Len(t, ups, before+1)
 		assert.Equal(t, created.ID.String(), ups[before].Slug)
@@ -232,8 +242,10 @@ func TestProductAdministration(t *testing.T) {
 		files.reply = `{"status":"error"}`
 		files.mu.Unlock()
 		t.Cleanup(func() { files.mu.Lock(); files.reply = `{"status":"ok"}`; files.mu.Unlock() })
-		_, err = r.Mutation().UpdateProduct(ctx, created.ID, model.UpdateProductInput{Image: upload("v3.png", "V3"), RemoveBackground: new(true)})
+		v3, err := r.Mutation().UpdateProduct(ctx, created.ID, model.UpdateProductInput{Image: upload("v3.png", "V3"), RemoveBackground: new(true)})
 		require.NoError(t, err, "a refused image is logged, the update stands")
+		require.NotNil(t, v3.ImageUpdatedAt)
+		assert.True(t, v3.ImageUpdatedAt.Equal(*v2.ImageUpdatedAt), "a refused image keeps the previous version")
 	})
 
 	t.Run("updateProduct refuses what cannot be stored", func(t *testing.T) {
